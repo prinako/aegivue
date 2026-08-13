@@ -131,7 +131,7 @@ impl Recorder {
                 "+faststart",
             ])
             .arg(pattern)
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
