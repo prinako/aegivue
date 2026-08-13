@@ -49,4 +49,8 @@ jobs:
         working-directory: apps/web
       - run: flutter build web --release
         working-directory: apps/web
-      - run: test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Verify Flutter commands leave repository clean
+        run: |
+          git status --short
+          git diff -- apps/web/pubspec.lock
+          test -z "$(git status --porcelain --untracked-files=all)"
