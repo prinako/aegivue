@@ -9,6 +9,7 @@ use thiserror::Error;
 use tokio::{
     fs,
     process::{Child, Command},
+    sync::Mutex,
 };
 use uuid::Uuid;
 
@@ -61,6 +62,7 @@ pub struct Recorder {
     storage: PathBuf,
     database: PgPool,
     segment_seconds: u64,
+    pending_metadata: Mutex<Vec<PathBuf>>,
 }
 
 impl Recorder {
@@ -75,6 +77,7 @@ impl Recorder {
             storage,
             database,
             segment_seconds,
+            pending_metadata: Mutex::new(Vec::new()),
         }
     }
 
@@ -87,6 +90,8 @@ impl Recorder {
             .to_path_buf();
         fs::create_dir_all(&camera_root).await?;
         self.ensure_directories().await?;
+        self.recover_finalized_segments().await;
+
         let pattern = camera_root.join("%Y/%m/%d/%H/%H-%M-%S.mp4.partial");
         let mut command = Command::new("ffmpeg");
         command
@@ -133,7 +138,7 @@ impl Recorder {
         Ok(command.spawn()?)
     }
 
-    async fn partial_files(&self) -> Vec<PathBuf> {
+    async fn files_with_suffix(&self, suffix: &str) -> Vec<PathBuf> {
         let root = self.storage.join(&self.camera.id);
         let mut pending = vec![root];
         let mut files = Vec::new();
@@ -145,13 +150,21 @@ impl Recorder {
                 let path = entry.path();
                 if entry.file_type().await.is_ok_and(|kind| kind.is_dir()) {
                     pending.push(path);
-                } else if path.to_string_lossy().ends_with(".mp4.partial") {
+                } else if path.to_string_lossy().ends_with(suffix) {
                     files.push(path);
                 }
             }
         }
         files.sort();
         files
+    }
+
+    async fn partial_files(&self) -> Vec<PathBuf> {
+        self.files_with_suffix(".mp4.partial").await
+    }
+
+    async fn finalized_files(&self) -> Vec<PathBuf> {
+        self.files_with_suffix(".mp4").await
     }
 
     pub async fn has_received_packets(&self) -> bool {
@@ -171,6 +184,8 @@ impl Recorder {
             tracing::error!(camera_id=%self.camera.id, %error, "unable to prepare current recording directories");
             return;
         }
+        self.retry_pending_metadata().await;
+
         let mut files = self.partial_files().await;
         if !include_latest {
             files.pop();
@@ -197,25 +212,109 @@ impl Recorder {
             tracing::warn!(camera_id=%self.camera.id, path=%partial.display(), "partial segment is not a valid playable MP4");
             return;
         };
-        let end = start + chrono::Duration::milliseconds(duration_ms);
         let final_path = PathBuf::from(partial.to_string_lossy().trim_end_matches(".partial"));
         if let Err(error) = fs::rename(partial, &final_path).await {
             tracing::error!(camera_id=%self.camera.id, error=%error, "unable to atomically finalize segment");
             return;
         }
+        if let Err(error) = self
+            .insert_recording_metadata(&final_path, metadata.len(), start, duration_ms)
+            .await
+        {
+            tracing::error!(camera_id=%self.camera.id, path=%final_path.display(), %error, "unable to persist finalized segment metadata; queued for retry");
+            self.queue_metadata_retry(final_path).await;
+        }
+    }
+
+    async fn insert_recording_metadata(
+        &self,
+        final_path: &Path,
+        file_size: u64,
+        start: chrono::DateTime<Utc>,
+        duration_ms: i64,
+    ) -> Result<(), sqlx::Error> {
+        let end = start + chrono::Duration::milliseconds(duration_ms);
         let relative = final_path
             .strip_prefix(&self.storage)
-            .unwrap_or(&final_path)
+            .unwrap_or(final_path)
             .to_string_lossy()
             .into_owned();
-        if let Err(error) = sqlx::query("INSERT INTO recordings(id,camera_id,start_time,end_time,file_path,file_size,container,duration_ms) VALUES($1,$2,$3,$4,$5,$6,'mp4',$7) ON CONFLICT(file_path) DO NOTHING")
-            .bind(Uuid::new_v4()).bind(&self.camera.id).bind(start).bind(end).bind(relative).bind(metadata.len() as i64).bind(duration_ms).execute(&self.database).await {
-            tracing::error!(camera_id=%self.camera.id, error=%error, "unable to persist finalized segment metadata");
+        sqlx::query("INSERT INTO recordings(id,camera_id,start_time,end_time,file_path,file_size,container,duration_ms) VALUES($1,$2,$3,$4,$5,$6,'mp4',$7) ON CONFLICT(file_path) DO NOTHING")
+            .bind(Uuid::new_v4())
+            .bind(&self.camera.id)
+            .bind(start)
+            .bind(end)
+            .bind(relative)
+            .bind(file_size as i64)
+            .bind(duration_ms)
+            .execute(&self.database)
+            .await?;
+        Ok(())
+    }
+
+    async fn queue_metadata_retry(&self, path: PathBuf) {
+        let mut pending = self.pending_metadata.lock().await;
+        if !pending.contains(&path) {
+            pending.push(path);
         }
+    }
+
+    async fn retry_pending_metadata(&self) {
+        let paths = {
+            let mut pending = self.pending_metadata.lock().await;
+            std::mem::take(&mut *pending)
+        };
+        for path in paths {
+            if let Err(error) = self.recover_finalized_file(&path).await {
+                tracing::warn!(camera_id=%self.camera.id, path=%path.display(), %error, "recording metadata retry deferred");
+                self.queue_metadata_retry(path).await;
+            }
+        }
+    }
+
+    async fn recover_finalized_segments(&self) {
+        for path in self.finalized_files().await {
+            if let Err(error) = self.recover_finalized_file(&path).await {
+                tracing::warn!(camera_id=%self.camera.id, path=%path.display(), %error, "unable to reconcile finalized recording metadata");
+                self.queue_metadata_retry(path).await;
+            }
+        }
+    }
+
+    async fn recover_finalized_file(&self, path: &Path) -> Result<(), String> {
+        let relative = path
+            .strip_prefix(&self.storage)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .into_owned();
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM recordings WHERE file_path=$1)",
+        )
+        .bind(&relative)
+        .fetch_one(&self.database)
+        .await
+        .map_err(|error| error.to_string())?;
+        if exists {
+            return Ok(());
+        }
+
+        let metadata = fs::metadata(path).await.map_err(|error| error.to_string())?;
+        if metadata.len() == 0 {
+            return Err("finalized recording is empty".to_string());
+        }
+        let start = segment_time(&self.storage, &self.camera.id, path)
+            .ok_or_else(|| "invalid finalized segment path".to_string())?;
+        let duration_ms = probe_duration_ms(path)
+            .await
+            .ok_or_else(|| "finalized recording is not a playable MP4".to_string())?;
+        self.insert_recording_metadata(path, metadata.len(), start, duration_ms)
+            .await
+            .map_err(|error| error.to_string())
     }
 
     pub async fn finalize(&self) {
         self.persist_segments(true).await;
+        self.retry_pending_metadata().await;
     }
 
     async fn ensure_directories(&self) -> Result<(), std::io::Error> {
@@ -257,6 +356,7 @@ async fn probe_duration_ms(path: &Path) -> Option<i64> {
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
     #[test]
     fn sequential_segments_have_individual_duration() {
         let starts = [0, 60, 120].map(|seconds| Utc.timestamp_opt(seconds, 0).unwrap());
