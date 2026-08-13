@@ -18,7 +18,7 @@ struct WorkerHandle {
 #[derive(Clone)]
 pub struct CameraManager {
     workers: Arc<Mutex<HashMap<String, WorkerHandle>>>,
-    start_locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
+    lifecycle_locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
     database: PgPool,
     storage: PathBuf,
     shutdown: CancellationToken,
@@ -34,12 +34,20 @@ impl CameraManager {
     ) -> Self {
         Self {
             workers: Arc::new(Mutex::new(HashMap::new())),
-            start_locks: Arc::new(Mutex::new(HashMap::new())),
+            lifecycle_locks: Arc::new(Mutex::new(HashMap::new())),
             database,
             storage,
             shutdown,
             segment_seconds,
         }
+    }
+
+    async fn lifecycle_lock(&self, id: &str) -> Arc<Mutex<()>> {
+        let mut locks = self.lifecycle_locks.lock().await;
+        locks
+            .entry(id.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
     }
 
     pub async fn start_enabled(&self) -> Result<(), sqlx::Error> {
@@ -73,17 +81,11 @@ impl CameraManager {
     }
 
     pub async fn start(&self, id: &str) -> Result<CameraState, String> {
-        // Serialize start attempts for the same camera while still allowing different cameras
-        // to start concurrently. Without this guard, simultaneous API/reconciliation starts can
-        // spawn duplicate FFmpeg workers before either one is registered in `workers`.
-        let start_lock = {
-            let mut locks = self.start_locks.lock().await;
-            locks
-                .entry(id.to_string())
-                .or_insert_with(|| Arc::new(Mutex::new(())))
-                .clone()
-        };
-        let _start_guard = start_lock.lock().await;
+        // Serialize lifecycle changes for the same camera while still allowing different cameras
+        // to start or stop concurrently. Without this guard, concurrent API/reconciliation calls
+        // can spawn duplicate FFmpeg workers or let a late start escape a completed stop.
+        let lifecycle_lock = self.lifecycle_lock(id).await;
+        let _lifecycle_guard = lifecycle_lock.lock().await;
 
         if let Some(handle) = self.workers.lock().await.get(id)
             && !handle.task.is_finished()
@@ -127,6 +129,9 @@ impl CameraManager {
     }
 
     pub async fn stop(&self, id: &str) -> Result<CameraState, String> {
+        let lifecycle_lock = self.lifecycle_lock(id).await;
+        let _lifecycle_guard = lifecycle_lock.lock().await;
+
         let Some(handle) = self.workers.lock().await.remove(id) else {
             return Ok(CameraState::Disabled);
         };
@@ -233,7 +238,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn per_camera_start_lock_serializes_same_camera_only() {
+    async fn per_camera_lifecycle_lock_is_shared_only_by_same_camera() {
         let locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let one = {
