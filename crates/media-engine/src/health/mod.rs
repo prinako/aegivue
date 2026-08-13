@@ -24,10 +24,34 @@ pub fn router(manager: CameraManager) -> Router {
                 })
             }),
         )
+        .route(
+            "/internal/v1/live",
+            get(|| async {
+                Json(Health {
+                    status: "ok",
+                    service: "vigilo-media",
+                })
+            }),
+        )
+        .route("/internal/v1/ready", get(readiness))
         .route("/internal/v1/cameras/{id}/start", post(start))
         .route("/internal/v1/cameras/{id}/stop", post(stop))
         .route("/internal/v1/cameras/{id}/status", get(status))
         .with_state(manager)
+}
+async fn readiness(
+    State(manager): State<CameraManager>,
+) -> Result<Json<Health>, (StatusCode, String)> {
+    manager
+        .readiness()
+        .await
+        .map(|()| {
+            Json(Health {
+                status: "ready",
+                service: "vigilo-media",
+            })
+        })
+        .map_err(|error| (StatusCode::SERVICE_UNAVAILABLE, error))
 }
 async fn start(
     State(m): State<CameraManager>,

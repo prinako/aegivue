@@ -30,6 +30,7 @@ pub fn transition(from: CameraState, to: CameraState) -> Result<CameraState, Tra
             | (Offline, Starting)
             | (Offline, Stopping)
             | (Stopping, Disabled)
+            | (Disabled, Disabled)
             | (_, Error)
     );
     valid.then_some(to).ok_or(TransitionError { from, to })
@@ -52,5 +53,27 @@ mod tests {
     #[test]
     fn caps_backoff_and_jitter() {
         assert_eq!(reconnect_delay(99, 5_000), Duration::from_secs(31));
+    }
+
+    #[test]
+    fn production_lifecycle_transitions_are_validated() {
+        use CameraState::*;
+        for sequence in [
+            vec![Disabled, Starting, Connecting, Online, Stopping, Disabled],
+            vec![
+                Disabled,
+                Starting,
+                Connecting,
+                Reconnecting,
+                Connecting,
+                Online,
+            ],
+            vec![Online, Reconnecting, Stopping, Disabled],
+            vec![Connecting, Error],
+        ] {
+            for pair in sequence.windows(2) {
+                assert_eq!(transition(pair[0], pair[1]).unwrap(), pair[1]);
+            }
+        }
     }
 }

@@ -3,6 +3,10 @@ node_modules/
 dist/
 target/
 .dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/build/
+**/.fvm/
 .pytest_cache/
 __pycache__/
 storage/recordings/*

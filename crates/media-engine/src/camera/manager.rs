@@ -2,13 +2,17 @@ use super::{commands::CameraCommand, worker::CameraWorker};
 use crate::recording::recorder::CameraConfig;
 use sqlx::PgPool;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
-use tokio::sync::{Mutex, mpsc, oneshot, watch};
+use tokio::{
+    sync::{Mutex, mpsc, oneshot, watch},
+    task::JoinHandle,
+};
 use tokio_util::sync::CancellationToken;
 use vigilo_common::CameraState;
 
 struct WorkerHandle {
     commands: mpsc::Sender<CameraCommand>,
     status: watch::Receiver<CameraState>,
+    task: JoinHandle<()>,
 }
 #[derive(Clone)]
 pub struct CameraManager {
@@ -16,15 +20,22 @@ pub struct CameraManager {
     database: PgPool,
     storage: PathBuf,
     shutdown: CancellationToken,
+    segment_seconds: u64,
 }
 
 impl CameraManager {
-    pub fn new(database: PgPool, storage: PathBuf, shutdown: CancellationToken) -> Self {
+    pub fn new(
+        database: PgPool,
+        storage: PathBuf,
+        shutdown: CancellationToken,
+        segment_seconds: u64,
+    ) -> Self {
         Self {
             workers: Arc::new(Mutex::new(HashMap::new())),
             database,
             storage,
             shutdown,
+            segment_seconds,
         }
     }
     pub async fn start_enabled(&self) -> Result<(), sqlx::Error> {
@@ -38,10 +49,30 @@ impl CameraManager {
         }
         Ok(())
     }
+    pub async fn reconcile(&self) -> Result<(), sqlx::Error> {
+        let enabled = sqlx::query_scalar::<_, String>("SELECT id FROM cameras WHERE enabled")
+            .fetch_all(&self.database)
+            .await?;
+        let running: Vec<String> = self.workers.lock().await.keys().cloned().collect();
+        for id in &enabled {
+            if let Err(error) = self.start(id).await {
+                tracing::warn!(camera_id=%id, %error, "camera reconciliation start deferred");
+            }
+        }
+        for id in running {
+            if !enabled.contains(&id) {
+                let _ = self.stop(&id).await;
+            }
+        }
+        Ok(())
+    }
     pub async fn start(&self, id: &str) -> Result<CameraState, String> {
         if let Some(handle) = self.workers.lock().await.get(id) {
-            return Ok(*handle.status.borrow());
+            if !handle.task.is_finished() {
+                return Ok(*handle.status.borrow());
+            }
         }
+        self.workers.lock().await.remove(id);
         let camera=sqlx::query_as::<_,CameraConfig>("SELECT id,host,port,username,password_secret,main_stream FROM cameras WHERE id=$1 AND enabled").bind(id).fetch_optional(&self.database).await.map_err(|e|e.to_string())?.ok_or_else(||"enabled camera not found".to_string())?;
         let (tx, rx) = mpsc::channel(8);
         let (status_tx, status_rx) = watch::channel(CameraState::Starting);
@@ -52,37 +83,38 @@ impl CameraManager {
             rx,
             status_tx,
             self.shutdown.child_token(),
+            self.segment_seconds,
         );
+        let task = tokio::spawn(async move {
+            worker.run().await;
+        });
         self.workers.lock().await.insert(
             id.to_string(),
             WorkerHandle {
                 commands: tx,
                 status: status_rx,
+                task,
             },
         );
-        tokio::spawn(async move {
-            worker.run().await;
-        });
         Ok(CameraState::Starting)
     }
     pub async fn stop(&self, id: &str) -> Result<CameraState, String> {
-        let handle = self
-            .workers
-            .lock()
-            .await
-            .remove(id)
-            .ok_or_else(|| "camera worker not found".to_string())?;
+        let Some(handle) = self.workers.lock().await.remove(id) else {
+            return Ok(CameraState::Disabled);
+        };
         handle
             .commands
             .send(CameraCommand::Stop)
             .await
             .map_err(|_| "camera worker stopped".to_string())?;
-        Ok(CameraState::Stopping)
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(10), handle.task).await;
+        Ok(CameraState::Disabled)
     }
     pub async fn status(&self, id: &str) -> CameraState {
         let workers = self.workers.lock().await;
         workers
             .get(id)
+            .filter(|h| !h.task.is_finished())
             .map(|h| *h.status.borrow())
             .unwrap_or(CameraState::Disabled)
     }
@@ -100,6 +132,38 @@ impl CameraManager {
             .await
             .map_err(|_| "camera worker stopped".to_string())?;
         rx.await.map_err(|_| "camera worker stopped".to_string())
+    }
+    pub async fn readiness(&self) -> Result<(), String> {
+        sqlx::query("SELECT 1")
+            .execute(&self.database)
+            .await
+            .map_err(|error| error.to_string())?;
+        tokio::fs::create_dir_all(&self.storage)
+            .await
+            .map_err(|error| error.to_string())?;
+        let probe = self.storage.join(".vigilo-write-probe");
+        tokio::fs::write(&probe, b"ready")
+            .await
+            .map_err(|error| error.to_string())?;
+        tokio::fs::remove_file(probe)
+            .await
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+    pub async fn shutdown_workers(&self) {
+        let handles: Vec<_> = self
+            .workers
+            .lock()
+            .await
+            .drain()
+            .map(|(_, handle)| handle)
+            .collect();
+        for handle in &handles {
+            let _ = handle.commands.send(CameraCommand::Stop).await;
+        }
+        for handle in handles {
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(10), handle.task).await;
+        }
     }
 }
 
@@ -120,6 +184,7 @@ mod tests {
             WorkerHandle {
                 commands: tx1,
                 status: rx1,
+                task: tokio::spawn(async {}),
             },
         );
         guard.insert(
@@ -127,6 +192,7 @@ mod tests {
             WorkerHandle {
                 commands: tx2,
                 status: rx2,
+                task: tokio::spawn(async {}),
             },
         );
         guard.remove("one");

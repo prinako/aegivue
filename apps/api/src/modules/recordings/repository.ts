@@ -43,6 +43,12 @@ export class RecordingRepository {
     );
     return rows.map(map);
   }
+  public async count(): Promise<number> {
+    const { rows } = await this.db.query(
+      "SELECT count(*)::bigint AS count FROM recordings",
+    );
+    return Number((rows[0] as { count: string }).count);
+  }
   public async find(id: string): Promise<RecordingView | null> {
     const { rows } = await this.db.query(
       "SELECT * FROM recordings WHERE id=$1",

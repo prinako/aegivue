@@ -22,6 +22,21 @@ export interface CameraControlResponse {
   state: CameraState;
 }
 
+export class MediaClientError extends Error {
+  public constructor(
+    public readonly kind:
+      | "unavailable"
+      | "timeout"
+      | "not_found"
+      | "conflict"
+      | "invalid"
+      | "internal",
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 export class MediaClient {
   public constructor(private readonly baseUrl: string) {}
 
@@ -52,12 +67,35 @@ export class MediaClient {
     path: string,
     method: "GET" | "POST",
   ): Promise<CameraControlResponse> {
-    const response = await fetch(new URL(path, this.baseUrl), {
-      method,
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!response.ok)
-      throw new Error(`Media service returned HTTP ${String(response.status)}`);
+    let response: Response;
+    try {
+      response = await fetch(new URL(path, this.baseUrl), {
+        method,
+        signal: AbortSignal.timeout(5_000),
+      });
+    } catch (error) {
+      const timeout =
+        error instanceof Error &&
+        (error.name === "TimeoutError" || error.name === "AbortError");
+      throw new MediaClientError(
+        timeout ? "timeout" : "unavailable",
+        timeout ? "Media request timed out" : "Media service is unavailable",
+      );
+    }
+    if (!response.ok) {
+      const kind =
+        response.status === 404
+          ? "not_found"
+          : response.status === 409
+            ? "conflict"
+            : response.status === 400
+              ? "invalid"
+              : "internal";
+      throw new MediaClientError(
+        kind,
+        `Media operation failed with status ${String(response.status)}`,
+      );
+    }
     return (await response.json()) as CameraControlResponse;
   }
 }

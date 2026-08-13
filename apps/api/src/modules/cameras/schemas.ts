@@ -51,3 +51,4 @@ export const createCamera = z
   });
 
 export type CreateCamera = z.infer<typeof createCamera>;
+export const updateCamera = z.object({ enabled: z.boolean() }).strict();

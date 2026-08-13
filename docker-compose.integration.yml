@@ -1,0 +1,15 @@
+services:
+  vigilo-media:
+    image: vigilo-integration-media
+    environment:
+      VIGILO_RECORDING_SEGMENT_SECONDS: 5
+  rtsp-source:
+    image: bluenviron/mediamtx:latest
+    networks: [vigilo-cameras]
+  rtsp-publisher:
+    image: vigilo-integration-media
+    depends_on: [rtsp-source]
+    entrypoint: ["ffmpeg"]
+    command: ["-re", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=10", "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-g", "10", "-keyint_min", "10", "-f", "rtsp", "rtsp://rtsp-source:8554/vigilo-test"]
+    restart: unless-stopped
+    networks: [vigilo-cameras]

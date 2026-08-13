@@ -1,13 +1,13 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { createReadStream } from "node:fs";
-import { access } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { RecordingRepository } from "./repository.js";
 
 const pagination = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(25),
-  offset: z.coerce.number().int().min(0).default(0),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
 });
 const recordingId = z.string().uuid();
 
@@ -21,8 +21,18 @@ export const recordingRoutes: FastifyPluginAsync<{
       return reply
         .code(400)
         .send({ code: "VALIDATION_ERROR", message: "Invalid pagination" });
-    const items = await repository.list(parsed.data.limit, parsed.data.offset);
-    return { items, limit: parsed.data.limit, offset: parsed.data.offset };
+    const offset = (parsed.data.page - 1) * parsed.data.pageSize;
+    const [items, totalItems] = await Promise.all([
+      repository.list(parsed.data.pageSize, offset),
+      repository.count(),
+    ]);
+    return {
+      items,
+      page: parsed.data.page,
+      pageSize: parsed.data.pageSize,
+      totalItems,
+      totalPages: Math.ceil(totalItems / parsed.data.pageSize),
+    };
   });
   app.get("/:id", async (request, reply) => {
     const parsed = recordingId.safeParse((request.params as { id: string }).id);
@@ -56,19 +66,61 @@ export const recordingRoutes: FastifyPluginAsync<{
         .code(400)
         .send({ code: "INVALID_PATH", message: "Invalid recording path" });
     try {
-      await access(file);
+      const metadata = await stat(file);
+      if (!metadata.isFile()) throw new Error("not a file");
+      let range: { start: number; end: number } | null;
+      try {
+        range = parseByteRange(request.headers.range, metadata.size);
+      } catch {
+        return await reply
+          .code(416)
+          .header("Content-Range", `bytes */${String(metadata.size)}`)
+          .send();
+      }
+      reply
+        .header("Accept-Ranges", "bytes")
+        .header(
+          "Content-Type",
+          recording.container === "mp4"
+            ? "video/mp4"
+            : "application/octet-stream",
+        );
+      if (range) {
+        reply
+          .code(206)
+          .header(
+            "Content-Range",
+            `bytes ${String(range.start)}-${String(range.end)}/${String(metadata.size)}`,
+          )
+          .header("Content-Length", String(range.end - range.start + 1));
+        return await reply.send(createReadStream(file, range));
+      }
+      reply.header("Content-Length", String(metadata.size));
+      return await reply.send(createReadStream(file));
     } catch {
       return reply.code(404).send({
         code: "FILE_NOT_FOUND",
         message: "Recording file is unavailable",
       });
     }
-    return reply
-      .type(
-        recording.container === "mp4"
-          ? "video/mp4"
-          : "application/octet-stream",
-      )
-      .send(createReadStream(file));
   });
 };
+
+export function parseByteRange(
+  header: string | undefined,
+  size: number,
+): { start: number; end: number } | null {
+  if (!header) return null;
+  const match = /^bytes=(\d+)-(\d*)$/.exec(header);
+  if (!match) throw new Error("invalid range");
+  const start = Number(match[1]);
+  const end = match[2] ? Number(match[2]) : size - 1;
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) ||
+    start > end ||
+    start >= size
+  )
+    throw new Error("range not satisfiable");
+  return { start, end: Math.min(end, size - 1) };
+}

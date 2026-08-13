@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use chrono::{DateTime, Datelike, NaiveDateTime, Timelike, Utc};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -41,6 +41,28 @@ pub fn segment_path(
     )))
 }
 
+pub fn segment_time(root: &Path, camera_key: &str, path: &Path) -> Option<DateTime<Utc>> {
+    let relative = path.strip_prefix(root.join(camera_key)).ok()?;
+    let parts: Vec<_> = relative.iter().map(|part| part.to_str()).collect();
+    if parts.len() != 5 || parts.iter().any(Option::is_none) {
+        return None;
+    }
+    let filename = parts[4]?.strip_suffix(".mp4.partial")?;
+    if !filename.starts_with(parts[3]?) {
+        return None;
+    }
+    let value = format!(
+        "{}-{}-{}T{}Z",
+        parts[0]?,
+        parts[1]?,
+        parts[2]?,
+        filename.replace('-', ":")
+    );
+    NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%SZ")
+        .ok()
+        .map(|value| value.and_utc())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -57,5 +79,39 @@ mod tests {
     #[test]
     fn blocks_traversal() {
         assert!(segment_path(Path::new("/data"), "../bad", Utc::now()).is_err());
+    }
+
+    #[test]
+    fn parses_segment_times_across_calendar_rollovers() {
+        let root = Path::new("/data");
+        for (path, expected) in [
+            (
+                "cam/2026/08/13/12/12-01-00.mp4.partial",
+                "2026-08-13T12:01:00Z",
+            ),
+            (
+                "cam/2026/08/13/13/13-00-00.mp4.partial",
+                "2026-08-13T13:00:00Z",
+            ),
+            (
+                "cam/2026/08/14/00/00-00-00.mp4.partial",
+                "2026-08-14T00:00:00Z",
+            ),
+            (
+                "cam/2026/09/01/00/00-00-00.mp4.partial",
+                "2026-09-01T00:00:00Z",
+            ),
+            (
+                "cam/2027/01/01/00/00-00-00.mp4.partial",
+                "2027-01-01T00:00:00Z",
+            ),
+        ] {
+            assert_eq!(
+                segment_time(root, "cam", &root.join(path)).unwrap(),
+                DateTime::parse_from_rfc3339(expected)
+                    .unwrap()
+                    .with_timezone(&Utc)
+            );
+        }
     }
 }

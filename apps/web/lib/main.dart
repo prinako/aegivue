@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'core/api_client.dart';
-import 'features/cameras/data/camera_repository.dart';
+import 'dashboard_controller.dart';
 import 'features/cameras/domain/camera.dart';
-import 'features/recordings/data/recording_repository.dart';
 import 'features/recordings/domain/recording.dart';
 
 void main() => runApp(const VigiloApp());
@@ -27,80 +26,78 @@ class Dashboard extends StatefulWidget {
 }
 
 class _DashboardState extends State<Dashboard> {
-  final api = ApiClient();
-  late final cameras = CameraRepository(api).list();
-  late final recordings = RecordingRepository(api).list();
+  late final DashboardController controller;
+  late Future<DashboardData> data;
+  @override
+  void initState() {
+    super.initState();
+    controller = DashboardController(ApiClient());
+    data = controller.load();
+  }
+
+  Future<void> refresh() async {
+    final fresh = controller.load();
+    setState(() => data = fresh);
+    await fresh;
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Vigilo')),
     body: RefreshIndicator(
-      onRefresh: () async => setState(() {}),
-      child: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          Text('Cameras', style: Theme.of(context).textTheme.headlineSmall),
-          FutureBuilder<List<Camera>>(
-            future: cameras,
-            builder: (context, snapshot) => _CameraList(snapshot: snapshot),
-          ),
-          const SizedBox(height: 32),
-          Text('Recordings', style: Theme.of(context).textTheme.headlineSmall),
-          FutureBuilder<List<Recording>>(
-            future: recordings,
-            builder: (context, snapshot) => _RecordingList(snapshot: snapshot),
-          ),
-        ],
+      onRefresh: refresh,
+      child: FutureBuilder<DashboardData>(
+        future: data,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return ListView(
+              children: const [
+                ListTile(title: Text('Unable to load Vigilo data')),
+              ],
+            );
+          }
+          if (!snapshot.hasData) {
+            return ListView(children: const [LinearProgressIndicator()]);
+          }
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Text('Cameras', style: Theme.of(context).textTheme.headlineSmall),
+              ...snapshot.data!.cameras.map(_cameraTile),
+              const SizedBox(height: 32),
+              Text(
+                'Recordings',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              ...snapshot.data!.recordings.map(_recordingTile),
+            ],
+          );
+        },
       ),
     ),
   );
 }
 
-class _CameraList extends StatelessWidget {
-  const _CameraList({required this.snapshot});
-  final AsyncSnapshot<List<Camera>> snapshot;
-  @override
-  Widget build(BuildContext context) {
-    if (snapshot.hasError) {
-      return const ListTile(title: Text('Unable to load cameras'));
-    }
-    if (!snapshot.hasData) return const LinearProgressIndicator();
-    return Column(
-      children: snapshot.data!
-          .map(
-            (camera) => ListTile(
-              leading: Icon(
-                camera.enabled ? Icons.videocam : Icons.videocam_off,
-              ),
-              title: Text(camera.name),
-              subtitle: Text(camera.id),
-            ),
-          )
-          .toList(),
-    );
-  }
+Widget _cameraTile(Camera camera) {
+  final state = camera.runtimeState;
+  final online = state == 'online';
+  return ListTile(
+    leading: Icon(
+      online ? Icons.videocam : Icons.videocam_off,
+      color: online ? Colors.green : null,
+    ),
+    title: Text(camera.name),
+    subtitle: Text(
+      '${camera.id} • ${camera.enabled ? "Enabled" : "Disabled"} • ${_label(state)}',
+    ),
+  );
 }
 
-class _RecordingList extends StatelessWidget {
-  const _RecordingList({required this.snapshot});
-  final AsyncSnapshot<List<Recording>> snapshot;
-  @override
-  Widget build(BuildContext context) {
-    if (snapshot.hasError) {
-      return const ListTile(title: Text('Unable to load recordings'));
-    }
-    if (!snapshot.hasData) return const LinearProgressIndicator();
-    return Column(
-      children: snapshot.data!
-          .map(
-            (recording) => ListTile(
-              leading: const Icon(Icons.play_circle),
-              title: Text(recording.cameraId),
-              subtitle: Text(
-                '${recording.startTime.toLocal()} • ${recording.container}',
-              ),
-            ),
-          )
-          .toList(),
-    );
-  }
-}
+Widget _recordingTile(Recording recording) => ListTile(
+  leading: const Icon(Icons.play_circle),
+  title: Text(recording.cameraId),
+  subtitle: Text('${recording.startTime.toLocal()} • ${recording.container}'),
+);
+String _label(String state) => state.isEmpty
+    ? 'Unknown'
+    : '${state[0].toUpperCase()}${state.substring(1)}';

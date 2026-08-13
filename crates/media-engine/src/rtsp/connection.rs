@@ -19,8 +19,9 @@ pub async fn connect(
     config: &CameraConfig,
     storage_path: PathBuf,
     database: PgPool,
+    segment_seconds: u64,
 ) -> Result<(Child, Recorder), ConnectionError> {
-    let mut recorder = Recorder::new(config.clone(), storage_path, database);
+    let recorder = Recorder::new(config.clone(), storage_path, database, segment_seconds);
     let mut child = recorder.start().await?;
     let deadline = Instant::now() + Duration::from_secs(12);
     loop {

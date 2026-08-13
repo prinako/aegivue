@@ -27,6 +27,7 @@ services:
       VIGILO_LOG_LEVEL: ${VIGILO_LOG_LEVEL:-info}
       VIGILO_MEDIA_URL: http://vigilo-media:3010
       VIGILO_STORAGE_PATH: /data/recordings
+      VIGILO_RECORDING_SEGMENT_SECONDS: ${VIGILO_RECORDING_SEGMENT_SECONDS:-60}
       VIGILO_TRUST_PROXY: ${VIGILO_TRUST_PROXY:-false}
     ports: ["${VIGILO_API_BIND:-127.0.0.1}:3000:3000"]
     volumes: [vigilo-recordings:/data/recordings:ro]
@@ -42,7 +43,7 @@ services:
       VIGILO_MEDIA_BIND: 0.0.0.0:3010
       VIGILO_STORAGE_PATH: /data/recordings
     volumes: [vigilo-recordings:/data/recordings]
-    healthcheck: {test: [CMD, "wget", "-q", "--spider", "http://127.0.0.1:3010/internal/v1/health"], interval: 10s, timeout: 3s, retries: 5}
+    healthcheck: {test: [CMD, "wget", "-q", "--spider", "http://127.0.0.1:3010/internal/v1/ready"], interval: 10s, timeout: 3s, retries: 5}
     restart: unless-stopped
     networks: [vigilo-internal, vigilo-cameras]
   vigilo-web:

@@ -127,4 +127,11 @@ export class CameraRepository {
         .rowCount === 1
     );
   }
+  async setEnabled(id: string, enabled: boolean): Promise<CameraView | null> {
+    const result = await this.db.query(
+      "UPDATE cameras SET enabled=$2,updated_at=now() WHERE id=$1",
+      [id, enabled],
+    );
+    return result.rowCount === 1 ? this.find(id) : null;
+  }
 }

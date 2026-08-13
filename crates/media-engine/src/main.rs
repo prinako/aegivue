@@ -17,21 +17,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bind: SocketAddr = env::var("VIGILO_MEDIA_BIND")
         .unwrap_or_else(|_| "0.0.0.0:3010".into())
         .parse()?;
+    let segment_seconds: u64 = env::var("VIGILO_RECORDING_SEGMENT_SECONDS")
+        .unwrap_or_else(|_| "60".into())
+        .parse()?;
+    if !(5..=3600).contains(&segment_seconds) {
+        return Err("VIGILO_RECORDING_SEGMENT_SECONDS must be between 5 and 3600".into());
+    }
     let database = PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
         .await?;
     let shutdown = CancellationToken::new();
-    let manager = CameraManager::new(database, storage, shutdown.clone());
+    let manager = CameraManager::new(database, storage, shutdown.clone(), segment_seconds);
     manager.start_enabled().await?;
+    let reconcile_manager = manager.clone();
+    let reconcile_shutdown = shutdown.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
+        loop {
+            tokio::select! { _ = interval.tick() => { if let Err(error) = reconcile_manager.reconcile().await { tracing::error!(%error, "camera reconciliation failed"); } }, () = reconcile_shutdown.cancelled() => break }
+        }
+    });
     let listener = tokio::net::TcpListener::bind(bind).await?;
     tracing::info!(service="vigilo-media",%bind,"media control API started");
-    axum::serve(listener, health::router(manager))
+    axum::serve(listener, health::router(manager.clone()))
         .with_graceful_shutdown(async move {
             shutdown_signal().await;
             shutdown.cancel();
         })
         .await?;
+    manager.shutdown_workers().await;
     Ok(())
 }
 
