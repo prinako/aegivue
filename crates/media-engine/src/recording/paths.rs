@@ -16,7 +16,7 @@ pub fn camera_directory(
     if camera_key.is_empty()
         || !camera_key
             .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
     {
         return Err(PathError::InvalidCameraKey);
     }
@@ -47,7 +47,11 @@ pub fn segment_time(root: &Path, camera_key: &str, path: &Path) -> Option<DateTi
     if parts.len() != 5 || parts.iter().any(Option::is_none) {
         return None;
     }
-    let filename = parts[4]?.strip_suffix(".mp4.partial")?;
+
+    let filename = parts[4]?;
+    let filename = filename
+        .strip_suffix(".mp4.partial")
+        .or_else(|| filename.strip_suffix(".mp4"))?;
     if !filename.starts_with(parts[3]?) {
         return None;
     }
@@ -66,6 +70,7 @@ pub fn segment_time(root: &Path, camera_key: &str, path: &Path) -> Option<DateTi
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn path_is_hierarchical() {
         let at = DateTime::parse_from_rfc3339("2026-08-13T14:20:00Z")
@@ -76,6 +81,7 @@ mod tests {
             PathBuf::from("/data/front-door/2026/08/13/14/14-20-00.mp4")
         );
     }
+
     #[test]
     fn blocks_traversal() {
         assert!(segment_path(Path::new("/data"), "../bad", Utc::now()).is_err());
@@ -113,5 +119,17 @@ mod tests {
                     .with_timezone(&Utc)
             );
         }
+    }
+
+    #[test]
+    fn parses_finalized_segment_time() {
+        let root = Path::new("/data");
+        let path = root.join("cam/2026/08/13/12/12-01-00.mp4");
+        assert_eq!(
+            segment_time(root, "cam", &path).unwrap(),
+            DateTime::parse_from_rfc3339("2026-08-13T12:01:00Z")
+                .unwrap()
+                .with_timezone(&Utc)
+        );
     }
 }

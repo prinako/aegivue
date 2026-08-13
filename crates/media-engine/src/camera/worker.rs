@@ -3,7 +3,7 @@ use crate::{recording::recorder::CameraConfig, rtsp};
 use sqlx::PgPool;
 use std::path::PathBuf;
 use tokio::{
-    io::AsyncReadExt,
+    io::{AsyncReadExt, AsyncWriteExt},
     sync::{mpsc, watch},
     time::sleep,
 };
@@ -121,11 +121,18 @@ impl CameraWorker {
 }
 
 async fn terminate_child(child: &mut tokio::process::Child) {
-    let _ = child.start_kill();
-    if tokio::time::timeout(std::time::Duration::from_secs(5), child.wait())
-        .await
-        .is_err()
-    {
-        tracing::warn!("FFmpeg did not exit within shutdown timeout");
+    if let Some(mut stdin) = child.stdin.take() {
+        // FFmpeg interprets `q` on stdin as a clean shutdown request, giving the MP4 muxer
+        // a chance to write its trailer before we fall back to a hard kill.
+        let _ = stdin.write_all(b"q\n").await;
+        let _ = stdin.shutdown().await;
     }
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await {
+        Ok(_) => return,
+        Err(_) => tracing::warn!("FFmpeg did not exit gracefully within shutdown timeout"),
+    }
+
+    let _ = child.start_kill();
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), child.wait()).await;
 }
