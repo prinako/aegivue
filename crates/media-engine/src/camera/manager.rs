@@ -67,10 +67,10 @@ impl CameraManager {
         Ok(())
     }
     pub async fn start(&self, id: &str) -> Result<CameraState, String> {
-        if let Some(handle) = self.workers.lock().await.get(id) {
-            if !handle.task.is_finished() {
-                return Ok(*handle.status.borrow());
-            }
+        if let Some(handle) = self.workers.lock().await.get(id)
+            && !handle.task.is_finished()
+        {
+            return Ok(*handle.status.borrow());
         }
         self.workers.lock().await.remove(id);
         let camera=sqlx::query_as::<_,CameraConfig>("SELECT id,host,port,username,password_secret,main_stream FROM cameras WHERE id=$1 AND enabled").bind(id).fetch_optional(&self.database).await.map_err(|e|e.to_string())?.ok_or_else(||"enabled camera not found".to_string())?;
