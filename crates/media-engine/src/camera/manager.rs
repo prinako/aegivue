@@ -14,9 +14,11 @@ struct WorkerHandle {
     status: watch::Receiver<CameraState>,
     task: JoinHandle<()>,
 }
+
 #[derive(Clone)]
 pub struct CameraManager {
     workers: Arc<Mutex<HashMap<String, WorkerHandle>>>,
+    start_locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
     database: PgPool,
     storage: PathBuf,
     shutdown: CancellationToken,
@@ -32,12 +34,14 @@ impl CameraManager {
     ) -> Self {
         Self {
             workers: Arc::new(Mutex::new(HashMap::new())),
+            start_locks: Arc::new(Mutex::new(HashMap::new())),
             database,
             storage,
             shutdown,
             segment_seconds,
         }
     }
+
     pub async fn start_enabled(&self) -> Result<(), sqlx::Error> {
         let ids = sqlx::query_scalar::<_, String>("SELECT id FROM cameras WHERE enabled")
             .fetch_all(&self.database)
@@ -49,6 +53,7 @@ impl CameraManager {
         }
         Ok(())
     }
+
     pub async fn reconcile(&self) -> Result<(), sqlx::Error> {
         let enabled = sqlx::query_scalar::<_, String>("SELECT id FROM cameras WHERE enabled")
             .fetch_all(&self.database)
@@ -66,14 +71,36 @@ impl CameraManager {
         }
         Ok(())
     }
+
     pub async fn start(&self, id: &str) -> Result<CameraState, String> {
+        // Serialize start attempts for the same camera while still allowing different cameras
+        // to start concurrently. Without this guard, simultaneous API/reconciliation starts can
+        // spawn duplicate FFmpeg workers before either one is registered in `workers`.
+        let start_lock = {
+            let mut locks = self.start_locks.lock().await;
+            locks
+                .entry(id.to_string())
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone()
+        };
+        let _start_guard = start_lock.lock().await;
+
         if let Some(handle) = self.workers.lock().await.get(id)
             && !handle.task.is_finished()
         {
             return Ok(*handle.status.borrow());
         }
+
         self.workers.lock().await.remove(id);
-        let camera=sqlx::query_as::<_,CameraConfig>("SELECT id,host,port,username,password_secret,main_stream FROM cameras WHERE id=$1 AND enabled").bind(id).fetch_optional(&self.database).await.map_err(|e|e.to_string())?.ok_or_else(||"enabled camera not found".to_string())?;
+        let camera = sqlx::query_as::<_, CameraConfig>(
+            "SELECT id,host,port,username,password_secret,main_stream FROM cameras WHERE id=$1 AND enabled",
+        )
+        .bind(id)
+        .fetch_optional(&self.database)
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "enabled camera not found".to_string())?;
+
         let (tx, rx) = mpsc::channel(8);
         let (status_tx, status_rx) = watch::channel(CameraState::Starting);
         let worker = CameraWorker::new(
@@ -98,6 +125,7 @@ impl CameraManager {
         );
         Ok(CameraState::Starting)
     }
+
     pub async fn stop(&self, id: &str) -> Result<CameraState, String> {
         let Some(handle) = self.workers.lock().await.remove(id) else {
             return Ok(CameraState::Disabled);
@@ -110,20 +138,22 @@ impl CameraManager {
         let _ = tokio::time::timeout(std::time::Duration::from_secs(10), handle.task).await;
         Ok(CameraState::Disabled)
     }
+
     pub async fn status(&self, id: &str) -> CameraState {
         let workers = self.workers.lock().await;
         workers
             .get(id)
-            .filter(|h| !h.task.is_finished())
-            .map(|h| *h.status.borrow())
+            .filter(|handle| !handle.task.is_finished())
+            .map(|handle| *handle.status.borrow())
             .unwrap_or(CameraState::Disabled)
     }
+
     pub async fn probe_status(&self, id: &str) -> Result<CameraState, String> {
         let sender = {
             let workers = self.workers.lock().await;
             workers
                 .get(id)
-                .map(|h| h.commands.clone())
+                .map(|handle| handle.commands.clone())
                 .ok_or_else(|| "camera worker not found".to_string())?
         };
         let (tx, rx) = oneshot::channel();
@@ -133,6 +163,7 @@ impl CameraManager {
             .map_err(|_| "camera worker stopped".to_string())?;
         rx.await.map_err(|_| "camera worker stopped".to_string())
     }
+
     pub async fn readiness(&self) -> Result<(), String> {
         sqlx::query("SELECT 1")
             .execute(&self.database)
@@ -150,6 +181,7 @@ impl CameraManager {
             .map_err(|error| error.to_string())?;
         Ok(())
     }
+
     pub async fn shutdown_workers(&self) {
         let handles: Vec<_> = self
             .workers
@@ -170,6 +202,7 @@ impl CameraManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[tokio::test]
     async fn independent_worker_map_does_not_remove_others() {
         let workers: Arc<Mutex<HashMap<String, WorkerHandle>>> =
@@ -197,5 +230,35 @@ mod tests {
         );
         guard.remove("one");
         assert!(guard.contains_key("two"));
+    }
+
+    #[tokio::test]
+    async fn per_camera_start_lock_serializes_same_camera_only() {
+        let locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let one = {
+            let mut guard = locks.lock().await;
+            guard
+                .entry("one".into())
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone()
+        };
+        let one_again = {
+            let mut guard = locks.lock().await;
+            guard
+                .entry("one".into())
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone()
+        };
+        let two = {
+            let mut guard = locks.lock().await;
+            guard
+                .entry("two".into())
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone()
+        };
+
+        assert!(Arc::ptr_eq(&one, &one_again));
+        assert!(!Arc::ptr_eq(&one, &two));
     }
 }
