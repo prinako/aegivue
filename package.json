@@ -1,0 +1,1 @@
+{"name":"vigilo","private":true,"workspaces":["apps/api"],"scripts":{"build":"npm -w apps/api run build","test":"npm -w apps/api test","typecheck":"npm -w apps/api run typecheck"},"engines":{"node":">=22"}}

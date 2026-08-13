@@ -1,0 +1,44 @@
+name: vigilo
+services:
+  vigilo-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: vigilo
+      POSTGRES_USER: vigilo
+      POSTGRES_PASSWORD: ${VIGILO_POSTGRES_PASSWORD:?set VIGILO_POSTGRES_PASSWORD}
+    volumes: [vigilo-postgres-data:/var/lib/postgresql/data]
+    healthcheck: {test: [CMD-SHELL, "pg_isready -U vigilo -d vigilo"], interval: 10s, timeout: 5s, retries: 5}
+    networks: [vigilo-internal]
+  vigilo-migrate:
+    image: postgres:17-alpine
+    depends_on: {vigilo-postgres: {condition: service_healthy}}
+    environment:
+      VIGILO_DATABASE_URL: postgres://vigilo:${VIGILO_POSTGRES_PASSWORD}@vigilo-postgres:5432/vigilo
+    volumes: [./database/migrations:/migrations:ro, ./database/migrate.sh:/migrate.sh:ro]
+    command: ["sh","/migrate.sh"]
+    networks: [vigilo-internal]
+  vigilo-api:
+    build: {context: ./apps/api}
+    depends_on: {vigilo-migrate: {condition: service_completed_successfully}}
+    environment:
+      VIGILO_DATABASE_URL: postgres://vigilo:${VIGILO_POSTGRES_PASSWORD}@vigilo-postgres:5432/vigilo
+      VIGILO_API_HOST: 0.0.0.0
+      VIGILO_API_PORT: 3000
+      VIGILO_LOG_LEVEL: ${VIGILO_LOG_LEVEL:-info}
+      VIGILO_TRUST_PROXY: ${VIGILO_TRUST_PROXY:-false}
+    ports: ["${VIGILO_API_BIND:-127.0.0.1}:3000:3000"]
+    healthcheck: {test: [CMD, "wget", "-q", "--spider", "http://127.0.0.1:3000/api/v1/health"], interval: 10s, timeout: 3s, retries: 5}
+    networks: [vigilo-internal, vigilo-public]
+  vigilo-media:
+    build: {context: ., dockerfile: crates/media-engine/Dockerfile}
+    environment: {VIGILO_LOG_LEVEL: "${VIGILO_LOG_LEVEL:-info}", VIGILO_STORAGE_PATH: /data/recordings}
+    volumes: [vigilo-recordings:/data/recordings]
+    restart: unless-stopped
+    networks: [vigilo-internal, vigilo-cameras]
+networks:
+  vigilo-internal: {internal: true}
+  vigilo-public: {}
+  vigilo-cameras: {}
+volumes:
+  vigilo-postgres-data: {}
+  vigilo-recordings: {}
