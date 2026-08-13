@@ -298,7 +298,9 @@ impl Recorder {
             return Ok(());
         }
 
-        let metadata = fs::metadata(path).await.map_err(|error| error.to_string())?;
+        let metadata = fs::metadata(path)
+            .await
+            .map_err(|error| error.to_string())?;
         if metadata.len() == 0 {
             return Err("finalized recording is empty".to_string());
         }
