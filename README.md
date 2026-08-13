@@ -4,14 +4,15 @@ Vigilo is a self-hosted NVR and intelligent video-surveillance platform for RTSP
 
 ## Status
 
-Vigilo is in early development. Implemented today: a PostgreSQL 17 schema, validated Fastify health and camera create/list/get/delete APIs, credential-safe camera read models, Docker deployment foundation, and tested Rust primitives for camera lifecycle, bounded pre-event packet retention, and recording paths.
+Vigilo is in early development. Implemented today: PostgreSQL-backed camera configuration, validated Fastify camera/control/recording APIs, a private Rust media control service, independently supervised camera workers, FFmpeg RTSP stream-copy recording into 60-second MP4 segments, recording metadata, and an initial Flutter web camera/recording dashboard.
 
-In progress: media-engine orchestration, RTSP ingestion and 60-second segmented recording. Planned after that: recording metadata/listing, Flutter UI, motion detection, ONVIF, and optional AI. This repository does **not** yet provide a complete NVR.
+Milestone 1 is implemented but still needs validation against a representative matrix of real camera models/codecs. Motion detection, ONVIF, alerts, and optional AI remain planned. Authentication and encrypted camera-secret storage are also required before internet-facing production use.
 
 ## Architecture
 
 - `apps/api`: TypeScript/Fastify control plane; configuration and metadata only.
-- `crates/media-engine`: Rust/Tokio media plane; camera workers and future FFmpeg integration.
+- `crates/media-engine`: Rust/Tokio media plane; isolated camera workers and FFmpeg recording.
+- `apps/web`: Flutter web dashboard, served by Nginx with same-origin API proxying.
 - `crates/vigilo-common`: versionable shared media contracts.
 - `database/migrations`: relational schema; media blobs never enter PostgreSQL.
 - `storage`: local development mount points; production storage is configurable.
@@ -27,7 +28,7 @@ docker compose up --build
 curl http://127.0.0.1:3000/api/v1/health
 ```
 
-The API documentation is at `http://127.0.0.1:3000/docs`. See [development setup](docs/development/getting-started.md) for local quality commands.
+Open the web interface at `http://127.0.0.1:8080`. API documentation is at `http://127.0.0.1:3000/docs`. Add a camera with `POST /api/v1/cameras`; enabled cameras start automatically and are restored after service restarts.
 
 ## Security notes
 

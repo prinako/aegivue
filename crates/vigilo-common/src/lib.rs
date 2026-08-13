@@ -22,3 +22,9 @@ pub struct CameraStatus {
     pub changed_at: DateTime<Utc>,
     pub reason: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CameraControlResponse {
+    pub camera_id: String,
+    pub state: CameraState,
+}
