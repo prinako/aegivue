@@ -11,18 +11,12 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/api/package-lock.json
-      - run: npm ci
-        working-directory: apps/api
-      - run: npm run typecheck
-        working-directory: apps/api
-      - run: npm run lint
-        working-directory: apps/api
-      - run: npm run format:check
-        working-directory: apps/api
-      - run: npm test
-        working-directory: apps/api
-      - run: npm run build
-        working-directory: apps/api
+      - run: npm ci --prefix apps/api
+      - run: npm --prefix apps/api run typecheck
+      - run: npm --prefix apps/api run lint
+      - run: npm --prefix apps/api run format:check
+      - run: npm --prefix apps/api test
+      - run: npm --prefix apps/api run build
 
   rust:
     runs-on: ubuntu-latest
