@@ -6,21 +6,40 @@ class ApiClient {
   final Dio _client;
   final String baseUrl;
 
-  Future<Object?> getJson(String path) async {
-    final response = await _client.get<Object?>(
+  Future<Object?> getJson(String path) async => _request('GET', path);
+
+  Future<Object?> postJson(String path, {Object? data}) async =>
+      _request('POST', path, data: data);
+
+  Future<Object?> patchJson(String path, {Object? data}) async =>
+      _request('PATCH', path, data: data);
+
+  Future<Object?> _request(String method, String path, {Object? data}) async {
+    final response = await _client.request<Object?>(
       '$baseUrl$path',
-      options: Options(validateStatus: (_) => true),
+      data: data,
+      options: Options(method: method, validateStatus: (_) => true),
     );
     final statusCode = response.statusCode ?? 0;
     if (statusCode < 200 || statusCode >= 300) {
-      throw ApiException(statusCode);
+      throw ApiException(statusCode, _message(response.data));
     }
-    final data = response.data;
-    return data is String ? jsonDecode(data) : data;
+    final body = response.data;
+    return body is String && body.isNotEmpty ? jsonDecode(body) : body;
+  }
+
+  String? _message(Object? data) {
+    if (data is Map<String, Object?>) return data['message'] as String?;
+    if (data is Map) return data['message']?.toString();
+    return null;
   }
 }
 
 class ApiException implements Exception {
-  const ApiException(this.statusCode);
+  const ApiException(this.statusCode, [this.message]);
   final int statusCode;
+  final String? message;
+
+  @override
+  String toString() => message ?? 'Request failed with status $statusCode';
 }
