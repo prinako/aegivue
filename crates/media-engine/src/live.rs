@@ -1,6 +1,9 @@
 use crate::recording::recorder::CameraConfig;
 use std::{env, path::PathBuf, process::Stdio};
-use tokio::{fs, process::{Child, Command}};
+use tokio::{
+    fs,
+    process::{Child, Command},
+};
 
 fn live_root() -> PathBuf {
     PathBuf::from(env::var("VIGILO_LIVE_PATH").unwrap_or_else(|_| "/tmp/vigilo-live".into()))
@@ -20,11 +23,9 @@ fn percent_encode(value: &str) -> String {
 
 fn rtsp_url(camera: &CameraConfig) -> String {
     let authority = match (&camera.username, &camera.password_secret) {
-        (Some(user), Some(password)) => format!(
-            "{}:{}@",
-            percent_encode(user),
-            percent_encode(password)
-        ),
+        (Some(user), Some(password)) => {
+            format!("{}:{}@", percent_encode(user), percent_encode(password))
+        }
         (Some(user), None) => format!("{}@", percent_encode(user)),
         _ => String::new(),
     };
