@@ -31,6 +31,7 @@ class LiveCameraView extends StatelessWidget {
         element.style.width = '100%';
         element.style.height = '100%';
         element.style.display = 'block';
+        element.style.pointerEvents = 'none';
       },
     );
   }
