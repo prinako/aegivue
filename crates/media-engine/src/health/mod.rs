@@ -106,10 +106,12 @@ async fn live_asset(
     }
 
     let path = live::root().join(camera).join(&file);
-    let bytes = tokio::fs::read(path).await.map_err(|error| match error.kind() {
-        std::io::ErrorKind::NotFound => StatusCode::NOT_FOUND,
-        _ => StatusCode::INTERNAL_SERVER_ERROR,
-    })?;
+    let bytes = tokio::fs::read(path)
+        .await
+        .map_err(|error| match error.kind() {
+            std::io::ErrorKind::NotFound => StatusCode::NOT_FOUND,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
 
     let content_type = if file.ends_with(".m3u8") {
         "application/vnd.apple.mpegurl"
