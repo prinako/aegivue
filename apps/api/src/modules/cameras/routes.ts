@@ -128,7 +128,11 @@ export const cameraRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       if (!(error instanceof MediaClientError && error.kind === "not_found")) {
         request.log.warn(
-          { camera_id: id, operation: "stop-before-update", status: "deferred" },
+          {
+            camera_id: id,
+            operation: "stop-before-update",
+            status: "deferred",
+          },
           "camera configuration saved; previous media worker could not be stopped",
         );
       }
@@ -138,7 +142,11 @@ export const cameraRoutes: FastifyPluginAsync = async (app) => {
         await app.media.start(camera);
       } catch {
         request.log.warn(
-          { camera_id: id, operation: "restart-after-update", status: "deferred" },
+          {
+            camera_id: id,
+            operation: "restart-after-update",
+            status: "deferred",
+          },
           "camera configuration saved; media restart deferred",
         );
       }

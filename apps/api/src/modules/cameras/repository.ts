@@ -167,7 +167,13 @@ export class CameraRepository {
         `UPDATE motion_configs
          SET enabled=$2,stream=$3,analysis_fps=$4,sensitivity=$5
          WHERE camera_id=$1`,
-        [id, c.motion.enabled, c.motion.stream, c.motion.fps, c.motion.sensitivity],
+        [
+          id,
+          c.motion.enabled,
+          c.motion.stream,
+          c.motion.fps,
+          c.motion.sensitivity,
+        ],
       );
       await client.query("COMMIT");
     } catch (error) {
@@ -181,8 +187,8 @@ export class CameraRepository {
 
   async remove(id: string): Promise<boolean> {
     return (
-      (await this.db.query("DELETE FROM cameras WHERE id=$1", [id]))
-        .rowCount === 1
+      (await this.db.query("DELETE FROM cameras WHERE id=$1", [id])).rowCount ===
+      1
     );
   }
 

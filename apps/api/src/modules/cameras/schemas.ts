@@ -32,10 +32,17 @@ const motion = z.object({
 });
 
 function validateMotionSubStream(
-  value: { connection: z.infer<typeof connection>; motion: z.infer<typeof motion> },
+  value: {
+    connection: z.infer<typeof connection>;
+    motion: z.infer<typeof motion>;
+  },
   ctx: z.RefinementCtx,
 ) {
-  if (value.motion.enabled && value.motion.stream === "sub" && !value.connection.subStream) {
+  if (
+    value.motion.enabled &&
+    value.motion.stream === "sub" &&
+    !value.connection.subStream
+  ) {
     ctx.addIssue({
       code: "custom",
       path: ["connection", "subStream"],
