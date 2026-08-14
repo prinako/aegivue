@@ -22,6 +22,8 @@ services:
     pull_policy: always
     depends_on: {vigilo-migrate: {condition: service_completed_successfully}}
     environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
       VIGILO_DATABASE_URL: postgres://vigilo:${VIGILO_POSTGRES_PASSWORD}@vigilo-postgres:5432/vigilo
       VIGILO_API_HOST: 0.0.0.0
       VIGILO_API_PORT: 3000
@@ -40,6 +42,8 @@ services:
     depends_on:
       vigilo-migrate: {condition: service_completed_successfully}
     environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
       VIGILO_DATABASE_URL: postgres://vigilo:${VIGILO_POSTGRES_PASSWORD}@vigilo-postgres:5432/vigilo
       VIGILO_LOG_LEVEL: ${VIGILO_LOG_LEVEL:-info}
       VIGILO_MEDIA_BIND: 0.0.0.0:3010
