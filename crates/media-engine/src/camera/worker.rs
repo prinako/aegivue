@@ -1,5 +1,5 @@
 use super::commands::CameraCommand;
-use crate::{recording::recorder::CameraConfig, rtsp};
+use crate::{live, recording::recorder::CameraConfig, rtsp};
 use sqlx::PgPool;
 use std::path::PathBuf;
 use tokio::{
@@ -59,29 +59,52 @@ impl CameraWorker {
             .await
             {
                 Ok((mut child, recorder)) => {
-                    if let Some(mut stderr) = child.stderr.take() {
-                        tokio::spawn(async move {
-                            let mut sink = [0_u8; 4096];
-                            while stderr.read(&mut sink).await.is_ok_and(|read| read > 0) {}
-                        });
-                    }
+                    drain_stderr(&mut child);
                     if !self.set_state(CameraState::Online) {
                         break;
                     }
+
+                    let mut live_child = match live::start(&self.camera).await {
+                        Ok(mut process) => {
+                            drain_stderr(&mut process);
+                            tracing::info!(camera_id=%self.camera.id, "live HLS preview started");
+                            Some(process)
+                        }
+                        Err(error) => {
+                            tracing::warn!(camera_id=%self.camera.id, %error, "unable to start live HLS preview");
+                            None
+                        }
+                    };
+
                     attempt = 0;
                     let mut metadata_tick =
                         tokio::time::interval(std::time::Duration::from_secs(5));
                     let should_stop = loop {
                         tokio::select! {
-                            result = child.wait() => { tracing::warn!(camera_id=%self.camera.id, ?result, "FFmpeg stream ended"); break false; }
+                            result = child.wait() => {
+                                tracing::warn!(camera_id=%self.camera.id, ?result, "FFmpeg stream ended");
+                                break false;
+                            }
                             command = self.commands.recv() => match command {
                                 Some(CameraCommand::Status(reply)) => { let _ = reply.send(*self.status.borrow()); }
-                                Some(CameraCommand::Stop) | None => { self.set_state(CameraState::Stopping); terminate_child(&mut child).await; break true; }
+                                Some(CameraCommand::Stop) | None => {
+                                    self.set_state(CameraState::Stopping);
+                                    terminate_child(&mut child).await;
+                                    break true;
+                                }
                             },
-                            () = self.shutdown.cancelled() => { self.set_state(CameraState::Stopping); terminate_child(&mut child).await; break true; }
+                            () = self.shutdown.cancelled() => {
+                                self.set_state(CameraState::Stopping);
+                                terminate_child(&mut child).await;
+                                break true;
+                            }
                             _ = metadata_tick.tick() => recorder.persist_segments(false).await,
                         }
                     };
+
+                    if let Some(process) = live_child.as_mut() {
+                        terminate_child(process).await;
+                    }
                     recorder.finalize().await;
                     if should_stop {
                         break;
@@ -120,10 +143,17 @@ impl CameraWorker {
     }
 }
 
+fn drain_stderr(child: &mut tokio::process::Child) {
+    if let Some(mut stderr) = child.stderr.take() {
+        tokio::spawn(async move {
+            let mut sink = [0_u8; 4096];
+            while stderr.read(&mut sink).await.is_ok_and(|read| read > 0) {}
+        });
+    }
+}
+
 async fn terminate_child(child: &mut tokio::process::Child) {
     if let Some(mut stdin) = child.stdin.take() {
-        // FFmpeg interprets `q` on stdin as a clean shutdown request, giving the MP4 muxer
-        // a chance to write its trailer before we fall back to a hard kill.
         let _ = stdin.write_all(b"q\n").await;
         let _ = stdin.shutdown().await;
     }
