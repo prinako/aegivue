@@ -48,21 +48,24 @@ services:
       VIGILO_LOG_LEVEL: ${VIGILO_LOG_LEVEL:-info}
       VIGILO_MEDIA_BIND: 0.0.0.0:3010
       VIGILO_STORAGE_PATH: /data/recordings
+      VIGILO_LIVE_PATH: /tmp/vigilo-live
     volumes: [vigilo-recordings:/data/recordings]
     healthcheck: {test: [CMD, "wget", "-q", "--spider", "http://127.0.0.1:3010/internal/v1/ready"], interval: 10s, timeout: 3s, retries: 5}
     restart: unless-stopped
-    networks: [vigilo-internal, vigilo-cameras]
+    networks: [vigilo-internal, vigilo-cameras, vigilo-stream]
   vigilo-web:
     image: ghcr.io/prinako/vigilo-web:${VIGILO_IMAGE_TAG:-latest}
     pull_policy: always
     depends_on:
       vigilo-api: {condition: service_healthy}
+      vigilo-media: {condition: service_healthy}
     ports: ["${VIGILO_WEB_BIND:-127.0.0.1}:8080:80"]
-    networks: [vigilo-public]
+    networks: [vigilo-public, vigilo-stream]
 networks:
   vigilo-internal: {internal: true}
   vigilo-public: {}
   vigilo-cameras: {}
+  vigilo-stream: {internal: true}
 volumes:
   vigilo-postgres-data: {}
   vigilo-recordings: {}
