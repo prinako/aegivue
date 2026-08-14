@@ -136,7 +136,7 @@ export const cameraRoutes: FastifyPluginAsync = async (app) => {
     if (camera.enabled) {
       try {
         await app.media.start(camera);
-      } catch (error) {
+      } catch {
         request.log.warn(
           { camera_id: id, operation: "restart-after-update", status: "deferred" },
           "camera configuration saved; media restart deferred",
