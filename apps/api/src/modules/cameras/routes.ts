@@ -109,27 +109,47 @@ export const cameraRoutes: FastifyPluginAsync = async (app) => {
     if (!parsed.success)
       return reply.code(400).send({
         code: "VALIDATION_ERROR",
-        message: "Only enabled may be updated",
+        message: "Invalid camera configuration",
+        details: parsed.error.flatten(),
       });
     const id = (request.params as { id: string }).id;
-    const camera = await repo.setEnabled(id, parsed.data.enabled);
+    const previous = await repo.find(id);
+    if (!previous)
+      return reply
+        .code(404)
+        .send({ code: "NOT_FOUND", message: "Camera not found" });
+    const camera = await repo.update(id, parsed.data);
     if (!camera)
       return reply
         .code(404)
         .send({ code: "NOT_FOUND", message: "Camera not found" });
     try {
-      if (parsed.data.enabled) await app.media.start(camera);
-      else await app.media.stop(id);
+      await app.media.stop(id);
     } catch (error) {
-      if (!(
-        error instanceof MediaClientError &&
-        error.kind === "not_found" &&
-        !parsed.data.enabled
-      ))
+      if (!(error instanceof MediaClientError && error.kind === "not_found")) {
         request.log.warn(
-          { camera_id: id, operation: "reconcile", status: "deferred" },
-          "durable camera state saved; media reconciliation deferred",
+          {
+            camera_id: id,
+            operation: "stop-before-update",
+            status: "deferred",
+          },
+          "camera configuration saved; previous media worker could not be stopped",
         );
+      }
+    }
+    if (camera.enabled) {
+      try {
+        await app.media.start(camera);
+      } catch {
+        request.log.warn(
+          {
+            camera_id: id,
+            operation: "restart-after-update",
+            status: "deferred",
+          },
+          "camera configuration saved; media restart deferred",
+        );
+      }
     }
     return camera;
   });

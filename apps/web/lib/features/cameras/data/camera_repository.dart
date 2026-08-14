@@ -4,6 +4,7 @@ import '../domain/camera.dart';
 class CameraRepository {
   const CameraRepository(this.api);
   final ApiClient api;
+
   Future<List<Camera>> list() async {
     final json = await api.getJson('/api/v1/cameras') as List<Object?>;
     final cameras = json
@@ -22,5 +23,21 @@ class CameraRepository {
         }
       }),
     );
+  }
+
+  Future<Camera> create(CameraConfiguration configuration) async {
+    final json = await api.postJson(
+      '/api/v1/cameras',
+      data: configuration.toJson(includeId: true),
+    );
+    return Camera.fromJson(json! as Map<String, Object?>);
+  }
+
+  Future<Camera> update(CameraConfiguration configuration) async {
+    final json = await api.patchJson(
+      '/api/v1/cameras/${configuration.id}',
+      data: configuration.toJson(includeId: false),
+    );
+    return Camera.fromJson(json! as Map<String, Object?>);
   }
 }
