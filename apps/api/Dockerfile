@@ -14,6 +14,7 @@ ENV NODE_ENV=production \
 WORKDIR /app
 
 RUN apk add --no-cache su-exec \
+    && deluser node \
     && addgroup -g 1000 vigilo \
     && adduser -D -H -u 1000 -G vigilo vigilo \
     && mkdir -p /data/recordings \

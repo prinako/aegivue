@@ -11,13 +11,9 @@ case "$PGID" in
   ''|*[!0-9]*) echo "PGID must be a numeric group ID" >&2; exit 1 ;;
 esac
 
-if [ "$(id -g vigilo)" != "$PGID" ]; then
-  delgroup vigilo 2>/dev/null || true
+if [ "$(id -u vigilo)" != "$PUID" ] || [ "$(id -g vigilo)" != "$PGID" ]; then
+  deluser vigilo
   addgroup -g "$PGID" vigilo
-fi
-
-if [ "$(id -u vigilo)" != "$PUID" ]; then
-  deluser vigilo 2>/dev/null || true
   adduser -D -H -u "$PUID" -G vigilo vigilo
 fi
 
