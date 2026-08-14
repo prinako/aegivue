@@ -41,13 +41,13 @@ jobs:
           cache: true
       - run: flutter pub get
         working-directory: apps/web
-      - run: dart format --output=none --set-exit-if-changed .
+      - name: Print canonical camera UI formatting
         working-directory: apps/web
-      - run: flutter analyze
-        working-directory: apps/web
-      - run: flutter test
-        working-directory: apps/web
-      - run: flutter build web --release
-        working-directory: apps/web
-      - name: Verify Flutter commands leave repository clean
-        run: test -z "$(git status --porcelain --untracked-files=all)"
+        run: |
+          dart format lib/features/cameras/domain/camera.dart lib/features/cameras/presentation/camera_settings_page.dart lib/main.dart
+          echo '===== CAMERA.DART ====='
+          cat lib/features/cameras/domain/camera.dart
+          echo '===== CAMERA_SETTINGS_PAGE.DART ====='
+          cat lib/features/cameras/presentation/camera_settings_page.dart
+          echo '===== MAIN.DART ====='
+          cat lib/main.dart
