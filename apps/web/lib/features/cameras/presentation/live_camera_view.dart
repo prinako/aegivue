@@ -17,7 +17,11 @@ class LiveCameraView extends StatelessWidget {
       return const ColoredBox(
         color: Color(0xFF080A0F),
         child: Center(
-          child: Icon(Icons.videocam_off_outlined, color: Colors.white24, size: 42),
+          child: Icon(
+            Icons.videocam_off_outlined,
+            color: Colors.white24,
+            size: 42,
+          ),
         ),
       );
     }
