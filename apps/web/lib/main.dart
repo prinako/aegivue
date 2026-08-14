@@ -48,10 +48,8 @@ class _DashboardState extends State<Dashboard> {
   Future<void> _openCameraSettings([Camera? camera]) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => CameraSettingsPage(
-          repository: controller.cameras,
-          camera: camera,
-        ),
+        builder: (_) =>
+            CameraSettingsPage(repository: controller.cameras, camera: camera),
       ),
     );
     if (changed == true) await refresh();
@@ -113,7 +111,9 @@ class _DashboardState extends State<Dashboard> {
                   child: ListTile(
                     leading: Icon(Icons.videocam_off),
                     title: Text('No cameras configured'),
-                    subtitle: Text('Add your first RTSP camera to start recording.'),
+                    subtitle: Text(
+                      'Add your first RTSP camera to start recording.',
+                    ),
                   ),
                 )
               else
