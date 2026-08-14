@@ -187,8 +187,8 @@ export class CameraRepository {
 
   async remove(id: string): Promise<boolean> {
     return (
-      (await this.db.query("DELETE FROM cameras WHERE id=$1", [id])).rowCount ===
-      1
+      (await this.db.query("DELETE FROM cameras WHERE id=$1", [id]))
+        .rowCount === 1
     );
   }
 
