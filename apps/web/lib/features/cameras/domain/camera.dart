@@ -13,13 +13,14 @@ class CameraConnection {
   final String mainStream;
   final String? subStream;
 
-  factory CameraConnection.fromJson(Map<String, Object?> json) => CameraConnection(
-    host: json['host']! as String,
-    port: (json['port']! as num).toInt(),
-    username: json['username'] as String?,
-    mainStream: json['mainStream']! as String,
-    subStream: json['subStream'] as String?,
-  );
+  factory CameraConnection.fromJson(Map<String, Object?> json) =>
+      CameraConnection(
+        host: json['host']! as String,
+        port: (json['port']! as num).toInt(),
+        username: json['username'] as String?,
+        mainStream: json['mainStream']! as String,
+        subStream: json['subStream'] as String?,
+      );
 }
 
 class CameraRecordingConfig {
