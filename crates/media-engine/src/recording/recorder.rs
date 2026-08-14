@@ -111,8 +111,15 @@ impl Recorder {
                 "0:v:0",
                 "-map",
                 "0:a?",
-                "-c",
+                // Camera video is already H.264 in the common case, so keep it zero-copy.
+                // Audio codecs such as G.711/PCM mu-law cannot be muxed directly into MP4;
+                // transcode only the small audio stream to AAC for broad MP4 compatibility.
+                "-c:v",
                 "copy",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "64k",
                 "-f",
                 "segment",
                 "-segment_format",
