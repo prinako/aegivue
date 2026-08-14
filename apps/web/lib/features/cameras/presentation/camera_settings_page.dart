@@ -310,7 +310,7 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
             onChanged: (value) => setState(() => _recordingEnabled = value),
           ),
           DropdownButtonFormField<String>(
-            value: _recordingMode,
+            initialValue: _recordingMode,
             decoration: const InputDecoration(
               labelText: 'Recording mode',
               border: OutlineInputBorder(),
@@ -358,7 +358,7 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
           ),
           _responsiveFields([
             DropdownButtonFormField<String>(
-              value: _motionStream,
+              initialValue: _motionStream,
               decoration: const InputDecoration(
                 labelText: 'Analysis stream',
                 border: OutlineInputBorder(),
