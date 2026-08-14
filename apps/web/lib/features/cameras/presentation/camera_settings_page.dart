@@ -5,11 +5,7 @@ import '../data/camera_repository.dart';
 import '../domain/camera.dart';
 
 class CameraSettingsPage extends StatefulWidget {
-  const CameraSettingsPage({
-    super.key,
-    required this.repository,
-    this.camera,
-  });
+  const CameraSettingsPage({super.key, required this.repository, this.camera});
 
   final CameraRepository repository;
   final Camera? camera;
@@ -53,8 +49,12 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
     _port = TextEditingController(text: '${camera?.connection.port ?? 554}');
     _username = TextEditingController(text: camera?.connection.username ?? '');
     _password = TextEditingController();
-    _mainStream = TextEditingController(text: camera?.connection.mainStream ?? '');
-    _subStream = TextEditingController(text: camera?.connection.subStream ?? '');
+    _mainStream = TextEditingController(
+      text: camera?.connection.mainStream ?? '',
+    );
+    _subStream = TextEditingController(
+      text: camera?.connection.subStream ?? '',
+    );
     _preEvent = TextEditingController(
       text: '${camera?.recording.preEventSeconds ?? 5}',
     );
@@ -90,9 +90,8 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
     super.dispose();
   }
 
-  String? _required(String? value) => value == null || value.trim().isEmpty
-      ? 'Required'
-      : null;
+  String? _required(String? value) =>
+      value == null || value.trim().isEmpty ? 'Required' : null;
 
   String? _stream(String? value) {
     final required = _required(value);
@@ -100,11 +99,7 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
     return value!.startsWith('/') ? null : 'Stream path must start with /';
   }
 
-  String? _integer(
-    String? value, {
-    required int min,
-    required int max,
-  }) {
+  String? _integer(String? value, {required int min, required int max}) {
     final parsed = int.tryParse(value ?? '');
     if (parsed == null) return 'Enter a number';
     if (parsed < min || parsed > max) return 'Use a value from $min to $max';
@@ -126,9 +121,15 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_motionEnabled && _motionStream == 'sub' && _subStream.text.trim().isEmpty) {
+    if (_motionEnabled &&
+        _motionStream == 'sub' &&
+        _subStream.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('A sub stream is required for sub-stream motion analysis.')),
+        const SnackBar(
+          content: Text(
+            'A sub stream is required for sub-stream motion analysis.',
+          ),
+        ),
       );
       return;
     }
@@ -144,7 +145,9 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
         username: _username.text.trim().isEmpty ? null : _username.text.trim(),
         password: _password.text.isEmpty ? null : _password.text,
         mainStream: _mainStream.text.trim(),
-        subStream: _subStream.text.trim().isEmpty ? null : _subStream.text.trim(),
+        subStream: _subStream.text.trim().isEmpty
+            ? null
+            : _subStream.text.trim(),
         recordingEnabled: _recordingEnabled,
         recordingMode: _recordingMode,
         preEventSeconds: int.parse(_preEvent.text),
@@ -164,13 +167,17 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message ?? 'Unable to save camera (${error.statusCode})')),
+        SnackBar(
+          content: Text(
+            error.message ?? 'Unable to save camera (${error.statusCode})',
+          ),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to save camera: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to save camera: $error')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -193,7 +200,8 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
               labelText: 'Camera ID',
               hintText: 'front-door',
               border: OutlineInputBorder(),
-              helperText: 'Stable identifier used in storage paths and API URLs.',
+              helperText:
+                  'Stable identifier used in storage paths and API URLs.',
             ),
             validator: _cameraId,
           ),
@@ -210,7 +218,9 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Enabled'),
-            subtitle: const Text('Enabled cameras are automatically kept running.'),
+            subtitle: const Text(
+              'Enabled cameras are automatically kept running.',
+            ),
             value: _enabled,
             onChanged: (value) => setState(() => _enabled = value),
           ),
@@ -251,12 +261,17 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
               obscureText: _obscurePassword,
               decoration: InputDecoration(
                 labelText: _editing ? 'New password' : 'Password',
-                helperText: _editing ? 'Leave blank to keep the current password.' : null,
+                helperText: _editing
+                    ? 'Leave blank to keep the current password.'
+                    : null,
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                  icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                  ),
                 ),
               ),
             ),
@@ -278,7 +293,8 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
               labelText: 'Sub stream path',
               hintText: '/Streaming/Channels/102',
               border: OutlineInputBorder(),
-              helperText: 'Optional now; recommended for future motion analysis.',
+              helperText:
+                  'Optional now; recommended for future motion analysis.',
             ),
             validator: (value) {
               if (value == null || value.trim().isEmpty) return null;
@@ -301,7 +317,10 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
             ),
             items: const [
               DropdownMenuItem(value: 'continuous', child: Text('Continuous')),
-              DropdownMenuItem(value: 'motion', child: Text('Motion (planned)')),
+              DropdownMenuItem(
+                value: 'motion',
+                child: Text('Motion (planned)'),
+              ),
             ],
             onChanged: (value) => setState(() => _recordingMode = value!),
           ),
@@ -331,7 +350,9 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Motion detection'),
-            subtitle: const Text('Configuration is saved now; detection is a later Vigilo phase.'),
+            subtitle: const Text(
+              'Configuration is saved now; detection is a later Vigilo phase.',
+            ),
             value: _motionEnabled,
             onChanged: (value) => setState(() => _motionEnabled = value),
           ),
@@ -350,7 +371,9 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
             ),
             TextFormField(
               controller: _motionFps,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(
                 labelText: 'Analysis FPS',
                 border: OutlineInputBorder(),
@@ -408,8 +431,6 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
     },
   );
 
-  Widget _sectionTitle(BuildContext context, String title) => Text(
-    title,
-    style: Theme.of(context).textTheme.titleLarge,
-  );
+  Widget _sectionTitle(BuildContext context, String title) =>
+      Text(title, style: Theme.of(context).textTheme.titleLarge);
 }
