@@ -98,10 +98,8 @@ class _DashboardState extends State<Dashboard> {
   Future<void> openCamera([Camera? camera]) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => CameraSettingsPage(
-          repository: controller.cameras,
-          camera: camera,
-        ),
+        builder: (_) =>
+            CameraSettingsPage(repository: controller.cameras, camera: camera),
       ),
     );
     if (changed == true) await refresh();
@@ -166,7 +164,8 @@ class _DashboardState extends State<Dashboard> {
               ? null
               : NavigationBar(
                   selectedIndex: section,
-                  onDestinationSelected: (value) => setState(() => section = value),
+                  onDestinationSelected: (value) =>
+                      setState(() => section = value),
                   destinations: const [
                     NavigationDestination(
                       icon: Icon(Icons.grid_view_rounded),
@@ -288,7 +287,11 @@ class _NavButton extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
-                Icon(icon, size: 20, color: selected ? Colors.white : Colors.white54),
+                Icon(
+                  icon,
+                  size: 20,
+                  color: selected ? Colors.white : Colors.white54,
+                ),
                 const SizedBox(width: 11),
                 Text(
                   label,
@@ -336,9 +339,9 @@ class _Header extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const Text(
                   'Security monitoring console',
@@ -379,8 +382,12 @@ class _Overview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final online = data.cameras.where((camera) => camera.runtimeState == 'online').length;
-    final recording = data.cameras.where((camera) => camera.recording.enabled).length;
+    final online = data.cameras
+        .where((camera) => camera.runtimeState == 'online')
+        .length;
+    final recording = data.cameras
+        .where((camera) => camera.recording.enabled)
+        .length;
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -392,29 +399,62 @@ class _Overview extends StatelessWidget {
           const SizedBox(height: 18),
           LayoutBuilder(
             builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 850 ? 4 : constraints.maxWidth >= 500 ? 2 : 1;
-              final width = (constraints.maxWidth - ((columns - 1) * 12)) / columns;
+              final columns = constraints.maxWidth >= 850
+                  ? 4
+                  : constraints.maxWidth >= 500
+                  ? 2
+                  : 1;
+              final width =
+                  (constraints.maxWidth - ((columns - 1) * 12)) / columns;
               return Wrap(
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  _Metric(width: width, icon: Icons.videocam_outlined, label: 'Cameras', value: '${data.cameras.length}'),
-                  _Metric(width: width, icon: Icons.wifi_tethering_rounded, label: 'Online', value: '$online'),
-                  _Metric(width: width, icon: Icons.fiber_manual_record_rounded, label: 'Recording', value: '$recording'),
-                  _Metric(width: width, icon: Icons.video_file_outlined, label: 'Clips', value: '${data.recordings.length}'),
+                  _Metric(
+                    width: width,
+                    icon: Icons.videocam_outlined,
+                    label: 'Cameras',
+                    value: '${data.cameras.length}',
+                  ),
+                  _Metric(
+                    width: width,
+                    icon: Icons.wifi_tethering_rounded,
+                    label: 'Online',
+                    value: '$online',
+                  ),
+                  _Metric(
+                    width: width,
+                    icon: Icons.fiber_manual_record_rounded,
+                    label: 'Recording',
+                    value: '$recording',
+                  ),
+                  _Metric(
+                    width: width,
+                    icon: Icons.video_file_outlined,
+                    label: 'Clips',
+                    value: '${data.recordings.length}',
+                  ),
                 ],
               );
             },
           ),
           const SizedBox(height: 30),
-          _SectionTitle(title: 'Live cameras', subtitle: 'Embedded browser-safe live previews', action: onAdd),
+          _SectionTitle(
+            title: 'Live cameras',
+            subtitle: 'Embedded browser-safe live previews',
+            action: onAdd,
+          ),
           const SizedBox(height: 12),
           if (data.cameras.isEmpty)
             _EmptyCameras(onAdd: onAdd)
           else
             LayoutBuilder(
               builder: (context, constraints) {
-                final columns = constraints.maxWidth >= 1100 ? 3 : constraints.maxWidth >= 680 ? 2 : 1;
+                final columns = constraints.maxWidth >= 1100
+                    ? 3
+                    : constraints.maxWidth >= 680
+                    ? 2
+                    : 1;
                 return GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -427,13 +467,19 @@ class _Overview extends StatelessWidget {
                   ),
                   itemBuilder: (context, index) {
                     final camera = data.cameras[index];
-                    return _CameraCard(camera: camera, onTap: () => onEdit(camera));
+                    return _CameraCard(
+                      camera: camera,
+                      onTap: () => onEdit(camera),
+                    );
                   },
                 );
               },
             ),
           const SizedBox(height: 30),
-          const _SectionTitle(title: 'Recent recordings', subtitle: 'Latest finalized camera segments'),
+          const _SectionTitle(
+            title: 'Recent recordings',
+            subtitle: 'Latest finalized camera segments',
+          ),
           const SizedBox(height: 12),
           _RecordingList(recordings: data.recordings.take(6).toList()),
         ],
@@ -470,14 +516,29 @@ class _Hero extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('$online of $total cameras online', style: const TextStyle(color: Color(0xFF68DDA9), fontSize: 12)),
+              Text(
+                '$online of $total cameras online',
+                style: const TextStyle(color: Color(0xFF68DDA9), fontSize: 12),
+              ),
               const SizedBox(height: 10),
-              Text('Your property at a glance', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text(
+                'Your property at a glance',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
               const SizedBox(height: 6),
-              const Text('Monitor live video, camera health, and recent footage from one private console.', style: TextStyle(color: Colors.white60)),
+              const Text(
+                'Monitor live video, camera health, and recent footage from one private console.',
+                style: TextStyle(color: Colors.white60),
+              ),
             ],
           ),
-          FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_rounded), label: const Text('Add camera')),
+          FilledButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Add camera'),
+          ),
         ],
       ),
     );
@@ -485,7 +546,12 @@ class _Hero extends StatelessWidget {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({required this.width, required this.icon, required this.label, required this.value});
+  const _Metric({
+    required this.width,
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   final double width;
   final IconData icon;
@@ -505,7 +571,9 @@ class _Metric extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, size: 19),
@@ -514,8 +582,17 @@ class _Metric extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(value, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
-                  Text(label, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 21,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
                 ],
               ),
             ],
@@ -535,7 +612,9 @@ class _CameraCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final online = camera.runtimeState == 'online';
-    final stateColor = online ? const Color(0xFF55D99F) : const Color(0xFFFFB65C);
+    final stateColor = online
+        ? const Color(0xFF55D99F)
+        : const Color(0xFFFFB65C);
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -564,12 +643,21 @@ class _CameraCard extends StatelessWidget {
                                 camera.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.w700),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                             if (camera.recording.enabled) ...[
                               const SizedBox(width: 8),
-                              const Text('REC', style: TextStyle(color: Color(0xFFFF6C78), fontSize: 9, fontWeight: FontWeight.w800)),
+                              const Text(
+                                'REC',
+                                style: TextStyle(
+                                  color: Color(0xFFFF6C78),
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                             ],
                           ],
                         ),
@@ -578,7 +666,10 @@ class _CameraCard extends StatelessWidget {
                           '${_label(camera.runtimeState)} • ${camera.connection.host}:${camera.connection.port}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white54, fontSize: 11),
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 11,
+                          ),
                         ),
                       ],
                     ),
@@ -599,7 +690,11 @@ class _CameraCard extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title, required this.subtitle, this.action});
+  const _SectionTitle({
+    required this.title,
+    required this.subtitle,
+    this.action,
+  });
 
   final String title;
   final String subtitle;
@@ -613,13 +708,26 @@ class _SectionTitle extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+              Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 2),
-              Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              Text(
+                subtitle,
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
             ],
           ),
         ),
-        if (action != null) TextButton.icon(onPressed: action, icon: const Icon(Icons.add_rounded), label: const Text('Add camera')),
+        if (action != null)
+          TextButton.icon(
+            onPressed: action,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Add camera'),
+          ),
       ],
     );
   }
@@ -637,13 +745,27 @@ class _EmptyCameras extends StatelessWidget {
         padding: const EdgeInsets.all(28),
         child: Column(
           children: [
-            const Icon(Icons.add_a_photo_outlined, size: 40, color: Colors.white38),
+            const Icon(
+              Icons.add_a_photo_outlined,
+              size: 40,
+              color: Colors.white38,
+            ),
             const SizedBox(height: 12),
-            const Text('No cameras configured', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            const Text(
+              'No cameras configured',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            ),
             const SizedBox(height: 5),
-            const Text('Add an RTSP camera to begin monitoring and recording.', style: TextStyle(color: Colors.white54)),
+            const Text(
+              'Add an RTSP camera to begin monitoring and recording.',
+              style: TextStyle(color: Colors.white54),
+            ),
             const SizedBox(height: 15),
-            FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_rounded), label: const Text('Add first camera')),
+            FilledButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add first camera'),
+            ),
           ],
         ),
       ),
@@ -665,9 +787,17 @@ class _Recordings extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 44),
         children: [
-          Text('Recording library', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
+          Text(
+            'Recording library',
+            style: Theme.of(
+              context,
+            ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 5),
-          const Text('Browse finalized footage stored by Vigilo.', style: TextStyle(color: Colors.white54)),
+          const Text(
+            'Browse finalized footage stored by Vigilo.',
+            style: TextStyle(color: Colors.white54),
+          ),
           const SizedBox(height: 20),
           _RecordingList(recordings: recordings),
         ],
@@ -691,7 +821,10 @@ class _RecordingList extends StatelessWidget {
             children: [
               Icon(Icons.video_library_outlined, color: Colors.white38),
               SizedBox(width: 12),
-              Text('No finalized recordings yet.', style: TextStyle(color: Colors.white54)),
+              Text(
+                'No finalized recordings yet.',
+                style: TextStyle(color: Colors.white54),
+              ),
             ],
           ),
         ),
@@ -703,7 +836,8 @@ class _RecordingList extends StatelessWidget {
         children: [
           for (var i = 0; i < recordings.length; i++) ...[
             _RecordingRow(recording: recordings[i]),
-            if (i != recordings.length - 1) const Divider(height: 1, indent: 58),
+            if (i != recordings.length - 1)
+              const Divider(height: 1, indent: 58),
           ],
         ],
       ),
@@ -719,7 +853,8 @@ class _RecordingRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final time = recording.startTime.toLocal();
-    final stamp = '${_two(time.day)}/${_two(time.month)}/${time.year}  ${_two(time.hour)}:${_two(time.minute)}';
+    final stamp =
+        '${_two(time.day)}/${_two(time.month)}/${time.year}  ${_two(time.hour)}:${_two(time.minute)}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
@@ -728,7 +863,10 @@ class _RecordingRow extends StatelessWidget {
           Container(
             width: 36,
             height: 36,
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.045), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.045),
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: const Icon(Icons.play_arrow_rounded, size: 21),
           ),
           const SizedBox(width: 11),
@@ -736,13 +874,22 @@ class _RecordingRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(recording.cameraId, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  recording.cameraId,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 2),
-                Text(stamp, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                Text(
+                  stamp,
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                ),
               ],
             ),
           ),
-          Text(recording.container.toUpperCase(), style: const TextStyle(color: Colors.white38, fontSize: 10)),
+          Text(
+            recording.container.toUpperCase(),
+            style: const TextStyle(color: Colors.white38, fontSize: 10),
+          ),
         ],
       ),
     );
@@ -762,14 +909,23 @@ class _ErrorState extends StatelessWidget {
         children: [
           const Icon(Icons.cloud_off_outlined, size: 40, color: Colors.white38),
           const SizedBox(height: 12),
-          const Text('Unable to load Vigilo data', style: TextStyle(fontWeight: FontWeight.w700)),
+          const Text(
+            'Unable to load Vigilo data',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 14),
-          OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh_rounded), label: const Text('Try again')),
+          OutlinedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Try again'),
+          ),
         ],
       ),
     );
   }
 }
 
-String _label(String state) => state.isEmpty ? 'Unknown' : '${state[0].toUpperCase()}${state.substring(1)}';
+String _label(String state) => state.isEmpty
+    ? 'Unknown'
+    : '${state[0].toUpperCase()}${state.substring(1)}';
 String _two(int value) => value.toString().padLeft(2, '0');
