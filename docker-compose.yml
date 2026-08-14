@@ -18,9 +18,12 @@ services:
     command: ["sh","/migrate.sh"]
     networks: [vigilo-internal]
   vigilo-api:
-    build: {context: ./apps/api}
+    image: ghcr.io/prinako/vigilo-api:${VIGILO_IMAGE_TAG:-latest}
+    pull_policy: always
     depends_on: {vigilo-migrate: {condition: service_completed_successfully}}
     environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
       VIGILO_DATABASE_URL: postgres://vigilo:${VIGILO_POSTGRES_PASSWORD}@vigilo-postgres:5432/vigilo
       VIGILO_API_HOST: 0.0.0.0
       VIGILO_API_PORT: 3000
@@ -34,10 +37,13 @@ services:
     healthcheck: {test: [CMD, "wget", "-q", "--spider", "http://127.0.0.1:3000/api/v1/health"], interval: 10s, timeout: 3s, retries: 5}
     networks: [vigilo-internal, vigilo-public]
   vigilo-media:
-    build: {context: ., dockerfile: crates/media-engine/Dockerfile}
+    image: ghcr.io/prinako/vigilo-media:${VIGILO_IMAGE_TAG:-latest}
+    pull_policy: always
     depends_on:
       vigilo-migrate: {condition: service_completed_successfully}
     environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
       VIGILO_DATABASE_URL: postgres://vigilo:${VIGILO_POSTGRES_PASSWORD}@vigilo-postgres:5432/vigilo
       VIGILO_LOG_LEVEL: ${VIGILO_LOG_LEVEL:-info}
       VIGILO_MEDIA_BIND: 0.0.0.0:3010
@@ -47,7 +53,8 @@ services:
     restart: unless-stopped
     networks: [vigilo-internal, vigilo-cameras]
   vigilo-web:
-    build: {context: ./apps/web}
+    image: ghcr.io/prinako/vigilo-web:${VIGILO_IMAGE_TAG:-latest}
+    pull_policy: always
     depends_on:
       vigilo-api: {condition: service_healthy}
     ports: ["${VIGILO_WEB_BIND:-127.0.0.1}:8080:80"]

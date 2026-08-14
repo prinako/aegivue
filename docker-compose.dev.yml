@@ -2,6 +2,15 @@ services:
   vigilo-postgres:
     ports: ["127.0.0.1:5432:5432"]
   vigilo-api:
-    build: {target: build}
+    build:
+      context: ./apps/api
+      target: build
     command: ["npm","run","dev"]
     volumes: [./apps/api/src:/src/src:ro]
+  vigilo-media:
+    build:
+      context: .
+      dockerfile: crates/media-engine/Dockerfile
+  vigilo-web:
+    build:
+      context: ./apps/web
