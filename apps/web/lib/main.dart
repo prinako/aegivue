@@ -219,7 +219,7 @@ class _TopBar extends StatelessWidget {
                 ),
                 const Text(
                   'Security monitoring console',
-                  style: TextStyle(color: Colors.white46, fontSize: 12),
+                  style: TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ],
             ),
@@ -559,7 +559,7 @@ class _Metric extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(value, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-                  Text(label, style: const TextStyle(color: Colors.white46, fontSize: 12)),
+                  Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
                 ],
               ),
             ],
@@ -626,7 +626,7 @@ class _CameraCard extends StatelessWidget {
                           '${camera.connection.host}:${camera.connection.port}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white46, fontSize: 12),
+                          style: const TextStyle(color: Colors.white54, fontSize: 12),
                         ),
                       ],
                     ),
@@ -706,7 +706,7 @@ class _SectionTitle extends StatelessWidget {
             children: [
               Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 2),
-              Text(subtitle, style: const TextStyle(color: Colors.white46, fontSize: 12)),
+              Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 12)),
             ],
           ),
         ),
@@ -826,7 +826,7 @@ class _RecordingRow extends StatelessWidget {
               children: [
                 Text(recording.cameraId, style: const TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 2),
-                Text(timestamp, style: const TextStyle(color: Colors.white46, fontSize: 11)),
+                Text(timestamp, style: const TextStyle(color: Colors.white54, fontSize: 11)),
               ],
             ),
           ),
