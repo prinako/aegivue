@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'core/api_client.dart';
 import 'dashboard_controller.dart';
 import 'features/cameras/domain/camera.dart';
+import 'features/cameras/presentation/camera_settings_page.dart';
 import 'features/recordings/domain/recording.dart';
 
 void main() => runApp(const VigiloApp());
 
 class VigiloApp extends StatelessWidget {
   const VigiloApp({super.key});
+
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Vigilo',
@@ -21,6 +23,7 @@ class VigiloApp extends StatelessWidget {
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
+
   @override
   State<Dashboard> createState() => _DashboardState();
 }
@@ -28,6 +31,7 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   late final DashboardController controller;
   late Future<DashboardData> data;
+
   @override
   void initState() {
     super.initState();
@@ -41,9 +45,35 @@ class _DashboardState extends State<Dashboard> {
     await fresh;
   }
 
+  Future<void> _openCameraSettings([Camera? camera]) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CameraSettingsPage(
+          repository: controller.cameras,
+          camera: camera,
+        ),
+      ),
+    );
+    if (changed == true) await refresh();
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Vigilo')),
+    appBar: AppBar(
+      title: const Text('Vigilo'),
+      actions: [
+        IconButton(
+          tooltip: 'Add camera',
+          onPressed: () => _openCameraSettings(),
+          icon: const Icon(Icons.add_a_photo),
+        ),
+      ],
+    ),
+    floatingActionButton: FloatingActionButton.extended(
+      onPressed: () => _openCameraSettings(),
+      icon: const Icon(Icons.add),
+      label: const Text('Add camera'),
+    ),
     body: RefreshIndicator(
       onRefresh: refresh,
       child: FutureBuilder<DashboardData>(
@@ -60,10 +90,34 @@ class _DashboardState extends State<Dashboard> {
             return ListView(children: const [LinearProgressIndicator()]);
           }
           return ListView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 96),
             children: [
-              Text('Cameras', style: Theme.of(context).textTheme.headlineSmall),
-              ...snapshot.data!.cameras.map(_cameraTile),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Cameras',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () => _openCameraSettings(),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add camera'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (snapshot.data!.cameras.isEmpty)
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.videocam_off),
+                    title: Text('No cameras configured'),
+                    subtitle: Text('Add your first RTSP camera to start recording.'),
+                  ),
+                )
+              else
+                ...snapshot.data!.cameras.map(_cameraTile),
               const SizedBox(height: 32),
               Text(
                 'Recordings',
@@ -76,21 +130,30 @@ class _DashboardState extends State<Dashboard> {
       ),
     ),
   );
-}
 
-Widget _cameraTile(Camera camera) {
-  final state = camera.runtimeState;
-  final online = state == 'online';
-  return ListTile(
-    leading: Icon(
-      online ? Icons.videocam : Icons.videocam_off,
-      color: online ? Colors.green : null,
-    ),
-    title: Text(camera.name),
-    subtitle: Text(
-      '${camera.id} • ${camera.enabled ? "Enabled" : "Disabled"} • ${_label(state)}',
-    ),
-  );
+  Widget _cameraTile(Camera camera) {
+    final state = camera.runtimeState;
+    final online = state == 'online';
+    return Card(
+      child: ListTile(
+        onTap: () => _openCameraSettings(camera),
+        leading: Icon(
+          online ? Icons.videocam : Icons.videocam_off,
+          color: online ? Colors.green : null,
+        ),
+        title: Text(camera.name),
+        subtitle: Text(
+          '${camera.id} • ${camera.connection.host}:${camera.connection.port} • '
+          '${camera.enabled ? "Enabled" : "Disabled"} • ${_label(state)}',
+        ),
+        trailing: IconButton(
+          tooltip: 'Camera settings',
+          onPressed: () => _openCameraSettings(camera),
+          icon: const Icon(Icons.settings),
+        ),
+      ),
+    );
+  }
 }
 
 Widget _recordingTile(Recording recording) => ListTile(
@@ -98,6 +161,7 @@ Widget _recordingTile(Recording recording) => ListTile(
   title: Text(recording.cameraId),
   subtitle: Text('${recording.startTime.toLocal()} • ${recording.container}'),
 );
+
 String _label(String state) => state.isEmpty
     ? 'Unknown'
     : '${state[0].toUpperCase()}${state.substring(1)}';
