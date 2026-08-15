@@ -28,7 +28,7 @@ class LiveCameraView extends StatelessWidget {
 
     return HtmlElementView.fromTagName(
       key: ValueKey('live-$cameraId'),
-      tagName: 'vigilo-live-player',
+      tagName: 'aegivue-live-player',
       onElementCreated: (element) {
         element as web.HTMLElement;
         element.setAttribute('camera-id', cameraId);
