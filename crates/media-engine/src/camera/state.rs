@@ -1,6 +1,6 @@
+use aegivue_common::CameraState;
 use std::time::Duration;
 use thiserror::Error;
-use vigilo_common::CameraState;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 #[error("invalid camera transition from {from:?} to {to:?}")]
