@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="apps/web/assets/vigilo-logo.png" alt="Vigilo logo" width="220">
+
 # Vigilo
 
 **A self-hosted foundation for reliable RTSP recording and playback.**
@@ -23,6 +25,7 @@ Vigilo is an open-source network video recorder built around isolated camera wor
 - Independently supervised camera workers—one failing stream does not stop the others
 - Automatic recovery of enabled cameras after a service restart
 - MP4 segment recording with atomic finalization and metadata indexing
+- Embedded browser-safe HLS live previews
 - Paginated recording history and byte-range media streaming
 - Camera lifecycle controls and status reporting through a validated REST API
 - Flutter web dashboard for camera and recording management
@@ -200,11 +203,10 @@ Please avoid disclosing security vulnerabilities in public issues. A dedicated s
 
 ## Roadmap
 
-The current milestone covers recording, recovery, metadata, playback delivery, and the initial dashboard. Planned work includes:
+The current milestone covers recording, recovery, metadata, playback delivery, live preview, and the initial dashboard. Planned work includes:
 
 - Authentication and encrypted secret storage
 - Retention policies and storage management
-- Embedded live video
 - ONVIF discovery and configuration
 - Motion detection, alerts, and optional AI integrations
 - Broader real-camera and codec validation
