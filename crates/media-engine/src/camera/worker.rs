@@ -1,5 +1,6 @@
 use super::commands::CameraCommand;
 use crate::{ffmpeg, live, recording::recorder::CameraConfig, rtsp};
+use aegivue_common::CameraState;
 use sqlx::PgPool;
 use std::path::PathBuf;
 use tokio::{
@@ -7,7 +8,6 @@ use tokio::{
     time::sleep,
 };
 use tokio_util::sync::CancellationToken;
-use vigilo_common::CameraState;
 
 pub struct CameraWorker {
     camera: CameraConfig,
