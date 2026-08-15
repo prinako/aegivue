@@ -1,5 +1,5 @@
 [package]
-name = "vigilo-media"
+name = "aegivue-media"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -16,4 +16,4 @@ tokio-util.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
-vigilo-common = { path = "../vigilo-common" }
+aegivue-common = { path = "../aegivue-common" }
