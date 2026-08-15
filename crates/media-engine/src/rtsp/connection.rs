@@ -1,4 +1,7 @@
-use crate::recording::recorder::{CameraConfig, Recorder, RecorderError};
+use crate::{
+    ffmpeg,
+    recording::recorder::{CameraConfig, Recorder, RecorderError},
+};
 use sqlx::PgPool;
 use std::path::PathBuf;
 use thiserror::Error;
@@ -23,6 +26,13 @@ pub async fn connect(
 ) -> Result<(Child, Recorder), ConnectionError> {
     let recorder = Recorder::new(config.clone(), storage_path, database, segment_seconds);
     let mut child = recorder.start().await?;
+    ffmpeg::log_stderr(
+        &mut child,
+        &config.id,
+        "recording",
+        config.username.as_deref(),
+        config.password_secret.as_deref(),
+    );
     let deadline = Instant::now() + Duration::from_secs(12);
     loop {
         if child.try_wait().map_err(RecorderError::Storage)?.is_some() {

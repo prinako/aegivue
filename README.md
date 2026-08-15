@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="apps/web/assets/vigilo-logo.png" alt="Vigilo logo" width="220">
+
 # Vigilo
 
 **A self-hosted foundation for reliable RTSP recording and playback.**
@@ -23,6 +25,9 @@ Vigilo is an open-source network video recorder built around isolated camera wor
 - Independently supervised camera workers—one failing stream does not stop the others
 - Automatic recovery of enabled cameras after a service restart
 - MP4 segment recording with atomic finalization and metadata indexing
+- Self-hosted, browser-safe HLS live previews with no runtime CDN dependency
+- Independently supervised recording and preview processes with bounded recovery backoff
+- Automatic substream selection for lower-bandwidth live previews
 - Paginated recording history and byte-range media streaming
 - Camera lifecycle controls and status reporting through a validated REST API
 - Flutter web dashboard for camera and recording management
@@ -77,7 +82,8 @@ curl -X POST http://127.0.0.1:3000/api/v1/cameras \
       "port": 554,
       "username": "camera-user",
       "password": "replace-me",
-      "mainStream": "/Streaming/Channels/101"
+      "mainStream": "/Streaming/Channels/101",
+      "subStream": "/Streaming/Channels/102"
     }
   }'
 ```
@@ -96,9 +102,11 @@ docker compose down
 flowchart LR
     Browser[Web browser] -->|HTTP| Web[Flutter + Nginx]
     Web -->|/api| API[Fastify API]
+    Web -->|/live/camera-id| Media[Rust media engine]
     API --> DB[(PostgreSQL)]
-    API -->|private control API| Media[Rust media engine]
+    API -->|private control API| Media
     Media -->|RTSP| Cameras[IP cameras]
+    Media -->|rolling HLS| Web
     Media -->|MP4 segments| Storage[(Recording storage)]
     API -->|range requests| Storage
 ```
@@ -114,6 +122,16 @@ flowchart LR
 PostgreSQL's `cameras.enabled` value is the durable desired state. The media engine reconciles that state at startup and every 15 seconds without creating duplicate workers.
 
 FFmpeg writes an active segment as `HH-MM-SS.mp4.partial` under `<storage>/<camera>/YYYY/MM/DD/HH`. Completed, non-empty segments are atomically renamed to `.mp4` and indexed in PostgreSQL. Segment duration defaults to 60 seconds and can be configured from 5 to 3,600 seconds with `VIGILO_RECORDING_SEGMENT_SECONDS`.
+
+### Live preview
+
+The media engine owns all RTSP and video processing. Recording always reads the configured main stream, while live preview prefers a non-empty substream and falls back to the main stream when no substream is configured.
+
+Live video remains H.264 stream-copy and video-only (`-c:v copy -an`). FFmpeg produces a short rolling HLS playlist at `/live/<camera-id>/index.m3u8`; Nginx proxies that path over the private `vigilo-stream` Docker network. The media engine's port `3010` is not published to the host.
+
+Recording and live preview have independent FFmpeg lifecycles. If preview FFmpeg exits, it is restarted with capped backoff while recording continues uninterrupted. Shutdown terminates both processes. Bounded FFmpeg diagnostics are logged for troubleshooting, with RTSP URLs and credential-like values sanitized.
+
+The dashboard uses the pinned HLS.js build vendored under [`apps/web/web/vendor/hls.js`](apps/web/web/vendor/hls.js), with native HLS as a fallback where the browser supports it. Once the container images are available, playback requires no internet connection or external CDN request.
 
 For more context on the service split, read [ADR 0001: Service boundaries](docs/architecture/0001-service-boundaries.md).
 
@@ -188,23 +206,28 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml \
 sh scripts/integration-rtsp.sh
 ```
 
+To confirm the live proxy independently, request a playlist for an online camera through the web service:
+
+```sh
+curl --fail http://127.0.0.1:8080/live/front-door/index.m3u8
+```
+
 See the full [development setup](docs/development/getting-started.md) for the concise contributor checklist.
 
 ## Security
 
 Vigilo currently has no built-in authentication. Its published ports bind to `127.0.0.1` by default; keep them private or place the application behind an authenticated reverse proxy.
 
-Camera passwords are omitted from responses and logs, but the current schema stores them in a restricted plaintext column and FFmpeg receives credential-bearing URLs through process arguments. Encryption, external key-provider integration, and removal of command-line credential exposure are outstanding security work.
+Camera passwords are omitted from responses, and FFmpeg diagnostics sanitize RTSP URLs and credential-like values before logging. The current schema still stores passwords in a restricted plaintext column, and FFmpeg receives credential-bearing URLs through process arguments. Encryption, external key-provider integration, and removal of command-line credential exposure are outstanding security work.
 
 Please avoid disclosing security vulnerabilities in public issues. A dedicated security policy and reporting channel are still to be published.
 
 ## Roadmap
 
-The current milestone covers recording, recovery, metadata, playback delivery, and the initial dashboard. Planned work includes:
+The current milestone covers recording, recovery, metadata, playback delivery, live preview, and the initial dashboard. Planned work includes:
 
 - Authentication and encrypted secret storage
 - Retention policies and storage management
-- Embedded live video
 - ONVIF discovery and configuration
 - Motion detection, alerts, and optional AI integrations
 - Broader real-camera and codec validation
