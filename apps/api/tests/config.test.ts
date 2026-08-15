@@ -4,14 +4,14 @@ describe("configuration", () => {
   it("applies safe defaults", () =>
     expect(
       loadConfig({
-        VIGILO_DATABASE_URL: "postgres://localhost/vigilo",
-      }).VIGILO_API_PORT,
+        AEGIVUE_DATABASE_URL: "postgres://localhost/aegivue",
+      }).AEGIVUE_API_PORT,
     ).toBe(3000));
   it("rejects invalid ports", () =>
     expect(() =>
       loadConfig({
-        VIGILO_DATABASE_URL: "postgres://localhost/vigilo",
-        VIGILO_API_PORT: "0",
+        AEGIVUE_DATABASE_URL: "postgres://localhost/aegivue",
+        AEGIVUE_API_PORT: "0",
       }),
     ).toThrow());
 });
