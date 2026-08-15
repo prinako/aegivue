@@ -15,14 +15,14 @@ WORKDIR /app
 
 RUN apk add --no-cache su-exec \
     && deluser node \
-    && addgroup -g 1000 aegivue \
-    && adduser -D -H -u 1000 -G aegivue aegivue \
+    && addgroup -g 1000 vigilo \
+    && adduser -D -H -u 1000 -G vigilo vigilo \
     && mkdir -p /data/recordings \
-    && chown aegivue:aegivue /data/recordings
+    && chown vigilo:vigilo /data/recordings
 
-COPY --from=build --chown=aegivue:aegivue /src/node_modules ./node_modules
-COPY --from=build --chown=aegivue:aegivue /src/dist ./dist
-COPY --from=build --chown=aegivue:aegivue /src/package.json ./
+COPY --from=build --chown=vigilo:vigilo /src/node_modules ./node_modules
+COPY --from=build --chown=vigilo:vigilo /src/dist ./dist
+COPY --from=build --chown=vigilo:vigilo /src/package.json ./
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
