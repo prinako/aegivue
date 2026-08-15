@@ -24,13 +24,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: vigilo-api
+          - name: aegivue-api
             context: apps/api
             dockerfile: apps/api/Dockerfile
-          - name: vigilo-media
+          - name: aegivue-media
             context: .
             dockerfile: crates/media-engine/Dockerfile
-          - name: vigilo-web
+          - name: aegivue-web
             context: apps/web
             dockerfile: apps/web/Dockerfile
 
@@ -63,7 +63,7 @@ jobs:
             type=sha,prefix=sha-
           labels: |
             org.opencontainers.image.title=${{ matrix.name }}
-            org.opencontainers.image.description=Vigilo self-hosted NVR component
+            org.opencontainers.image.description=Aegivue self-hosted NVR component
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
 
       - name: Build and publish

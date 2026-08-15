@@ -1,5 +1,5 @@
+use aegivue_common::CameraState;
 use tokio::sync::oneshot;
-use vigilo_common::CameraState;
 
 #[derive(Debug)]
 pub enum CameraCommand {

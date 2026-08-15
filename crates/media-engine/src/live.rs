@@ -7,7 +7,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 fn live_root() -> PathBuf {
-    PathBuf::from(env::var("VIGILO_LIVE_PATH").unwrap_or_else(|_| "/tmp/vigilo-live".into()))
+    PathBuf::from(env::var("AEGIVUE_LIVE_PATH").unwrap_or_else(|_| "/tmp/aegivue-live".into()))
 }
 
 fn percent_encode(value: &str) -> String {
@@ -49,8 +49,8 @@ fn live_stream(camera: &CameraConfig) -> &str {
 }
 
 fn publish_url(camera: &CameraConfig) -> String {
-    let base = env::var("VIGILO_WEBRTC_PUBLISH_URL")
-        .unwrap_or_else(|_| "rtsp://vigilo-webrtc:8554".into());
+    let base = env::var("AEGIVUE_WEBRTC_PUBLISH_URL")
+        .unwrap_or_else(|_| "rtsp://aegivue-webrtc:8554".into());
     format!("{}/{}", base.trim_end_matches('/'), camera.id)
 }
 

@@ -1,27 +1,27 @@
+use aegivue_media::{camera::CameraManager, health};
 use sqlx::postgres::PgPoolOptions;
 use std::{env, net::SocketAddr, path::PathBuf};
 use tokio_util::sync::CancellationToken;
-use vigilo_media::{camera::CameraManager, health};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .json()
-        .with_env_filter(env::var("VIGILO_LOG_LEVEL").unwrap_or_else(|_| "info".into()))
+        .with_env_filter(env::var("AEGIVUE_LOG_LEVEL").unwrap_or_else(|_| "info".into()))
         .init();
     let database_url =
-        env::var("VIGILO_DATABASE_URL").map_err(|_| "VIGILO_DATABASE_URL is required")?;
+        env::var("AEGIVUE_DATABASE_URL").map_err(|_| "AEGIVUE_DATABASE_URL is required")?;
     let storage = PathBuf::from(
-        env::var("VIGILO_STORAGE_PATH").map_err(|_| "VIGILO_STORAGE_PATH is required")?,
+        env::var("AEGIVUE_STORAGE_PATH").map_err(|_| "AEGIVUE_STORAGE_PATH is required")?,
     );
-    let bind: SocketAddr = env::var("VIGILO_MEDIA_BIND")
+    let bind: SocketAddr = env::var("AEGIVUE_MEDIA_BIND")
         .unwrap_or_else(|_| "0.0.0.0:3010".into())
         .parse()?;
-    let segment_seconds: u64 = env::var("VIGILO_RECORDING_SEGMENT_SECONDS")
+    let segment_seconds: u64 = env::var("AEGIVUE_RECORDING_SEGMENT_SECONDS")
         .unwrap_or_else(|_| "60".into())
         .parse()?;
     if !(5..=3600).contains(&segment_seconds) {
-        return Err("VIGILO_RECORDING_SEGMENT_SECONDS must be between 5 and 3600".into());
+        return Err("AEGIVUE_RECORDING_SEGMENT_SECONDS must be between 5 and 3600".into());
     }
     let database = PgPoolOptions::new()
         .max_connections(5)
@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
     let listener = tokio::net::TcpListener::bind(bind).await?;
-    tracing::info!(service="vigilo-media",%bind,"media control API started");
+    tracing::info!(service="aegivue-media",%bind,"media control API started");
     axum::serve(listener, health::router(manager.clone()))
         .with_graceful_shutdown(async move {
             shutdown_signal().await;

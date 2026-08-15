@@ -9,17 +9,17 @@ import type { Config } from "./config/env.js";
 
 export async function buildApp(config: Config) {
   const app = Fastify({
-    logger: { level: config.VIGILO_LOG_LEVEL, base: { service: "vigilo-api" } },
-    trustProxy: config.VIGILO_TRUST_PROXY,
+    logger: { level: config.AEGIVUE_LOG_LEVEL, base: { service: "aegivue-api" } },
+    trustProxy: config.AEGIVUE_TRUST_PROXY,
   });
   await app.register(swagger, {
-    openapi: { info: { title: "Vigilo API", version: "0.1.0" } },
+    openapi: { info: { title: "Aegivue API", version: "0.1.0" } },
   });
   await app.register(swaggerUi, { routePrefix: "/docs" });
   await app.register(databasePlugin, {
-    connectionString: config.VIGILO_DATABASE_URL,
+    connectionString: config.AEGIVUE_DATABASE_URL,
   });
-  app.decorate("media", new MediaClient(config.VIGILO_MEDIA_URL));
+  app.decorate("media", new MediaClient(config.AEGIVUE_MEDIA_URL));
   app.setErrorHandler((error, request, reply) => {
     const httpError = error as { statusCode?: number; message?: string };
     const status =
@@ -38,17 +38,17 @@ export async function buildApp(config: Config) {
   app.get("/api/v1/health", async (_request, reply) => {
     try {
       await app.db.query("SELECT 1");
-      return { status: "ok", service: "vigilo-api" };
+      return { status: "ok", service: "aegivue-api" };
     } catch {
       return reply
         .code(503)
-        .send({ status: "unavailable", service: "vigilo-api" });
+        .send({ status: "unavailable", service: "aegivue-api" });
     }
   });
   await app.register(cameraRoutes, { prefix: "/api/v1/cameras" });
   await app.register(recordingRoutes, {
     prefix: "/api/v1/recordings",
-    storagePath: config.VIGILO_STORAGE_PATH,
+    storagePath: config.AEGIVUE_STORAGE_PATH,
   });
   return app;
 }

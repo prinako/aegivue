@@ -1,5 +1,6 @@
 use super::{commands::CameraCommand, worker::CameraWorker};
 use crate::recording::recorder::CameraConfig;
+use aegivue_common::CameraState;
 use sqlx::PgPool;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::{
@@ -7,7 +8,6 @@ use tokio::{
     task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
-use vigilo_common::CameraState;
 
 struct WorkerHandle {
     commands: mpsc::Sender<CameraCommand>,
@@ -177,7 +177,7 @@ impl CameraManager {
         tokio::fs::create_dir_all(&self.storage)
             .await
             .map_err(|error| error.to_string())?;
-        let probe = self.storage.join(".vigilo-write-probe");
+        let probe = self.storage.join(".aegivue-write-probe");
         tokio::fs::write(&probe, b"ready")
             .await
             .map_err(|error| error.to_string())?;

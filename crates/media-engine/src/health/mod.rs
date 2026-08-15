@@ -1,4 +1,5 @@
 use crate::{camera::CameraManager, live};
+use aegivue_common::CameraControlResponse;
 use axum::{
     Json, Router,
     body::Body,
@@ -7,7 +8,6 @@ use axum::{
     routing::{get, post},
 };
 use serde::Serialize;
-use vigilo_common::CameraControlResponse;
 
 #[derive(Serialize)]
 struct Health {
@@ -22,7 +22,7 @@ pub fn router(manager: CameraManager) -> Router {
             get(|| async {
                 Json(Health {
                     status: "ok",
-                    service: "vigilo-media",
+                    service: "aegivue-media",
                 })
             }),
         )
@@ -31,7 +31,7 @@ pub fn router(manager: CameraManager) -> Router {
             get(|| async {
                 Json(Health {
                     status: "ok",
-                    service: "vigilo-media",
+                    service: "aegivue-media",
                 })
             }),
         )
@@ -52,7 +52,7 @@ async fn readiness(
         .map(|()| {
             Json(Health {
                 status: "ready",
-                service: "vigilo-media",
+                service: "aegivue-media",
             })
         })
         .map_err(|error| (StatusCode::SERVICE_UNAVAILABLE, error))
@@ -147,7 +147,7 @@ fn safe_live_file(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vigilo_common::CameraState;
+    use aegivue_common::CameraState;
 
     #[test]
     fn control_contract_serializes() {

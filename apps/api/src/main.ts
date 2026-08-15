@@ -11,6 +11,6 @@ const shutdown = async (signal: string) => {
 process.once("SIGINT", () => void shutdown("SIGINT"));
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
 await app.listen({
-  host: config.VIGILO_API_HOST,
-  port: config.VIGILO_API_PORT,
+  host: config.AEGIVUE_API_HOST,
+  port: config.AEGIVUE_API_PORT,
 });

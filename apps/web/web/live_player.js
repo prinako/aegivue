@@ -1,4 +1,4 @@
-class VigiloLivePlayer extends HTMLElement {
+class AegivueLivePlayer extends HTMLElement {
   static get observedAttributes() { return ['camera-id']; }
 
   constructor() {
@@ -213,6 +213,6 @@ class VigiloLivePlayer extends HTMLElement {
   }
 }
 
-if (!customElements.get('vigilo-live-player')) {
-  customElements.define('vigilo-live-player', VigiloLivePlayer);
+if (!customElements.get('aegivue-live-player')) {
+  customElements.define('aegivue-live-player', AegivueLivePlayer);
 }

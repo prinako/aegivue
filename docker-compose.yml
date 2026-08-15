@@ -1,94 +1,94 @@
-name: vigilo
+name: aegivue
 services:
-  vigilo-postgres:
+  aegivue-postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: vigilo
-      POSTGRES_USER: vigilo
-      POSTGRES_PASSWORD: ${VIGILO_POSTGRES_PASSWORD:?set VIGILO_POSTGRES_PASSWORD}
-    volumes: [vigilo-postgres-data:/var/lib/postgresql/data]
-    healthcheck: {test: [CMD-SHELL, "pg_isready -U vigilo -d vigilo"], interval: 10s, timeout: 5s, retries: 5}
-    networks: [vigilo-internal]
+      POSTGRES_DB: aegivue
+      POSTGRES_USER: aegivue
+      POSTGRES_PASSWORD: ${AEGIVUE_POSTGRES_PASSWORD:?set AEGIVUE_POSTGRES_PASSWORD}
+    volumes: [aegivue-postgres-data:/var/lib/postgresql/data]
+    healthcheck: {test: [CMD-SHELL, "pg_isready -U aegivue -d aegivue"], interval: 10s, timeout: 5s, retries: 5}
+    networks: [aegivue-internal]
 
-  vigilo-migrate:
+  aegivue-migrate:
     image: postgres:17-alpine
-    depends_on: {vigilo-postgres: {condition: service_healthy}}
+    depends_on: {aegivue-postgres: {condition: service_healthy}}
     environment:
-      VIGILO_DATABASE_URL: postgres://vigilo:${VIGILO_POSTGRES_PASSWORD}@vigilo-postgres:5432/vigilo
+      AEGIVUE_DATABASE_URL: postgres://aegivue:${AEGIVUE_POSTGRES_PASSWORD}@aegivue-postgres:5432/aegivue
     volumes: [./database/migrations:/migrations:ro, ./database/migrate.sh:/migrate.sh:ro]
     command: ["sh","/migrate.sh"]
-    networks: [vigilo-internal]
+    networks: [aegivue-internal]
 
-  vigilo-api:
-    image: ghcr.io/prinako/vigilo-api:${VIGILO_IMAGE_TAG:-latest}
+  aegivue-api:
+    image: ghcr.io/prinako/aegivue-api:${AEGIVUE_IMAGE_TAG:-latest}
     pull_policy: always
-    depends_on: {vigilo-migrate: {condition: service_completed_successfully}}
+    depends_on: {aegivue-migrate: {condition: service_completed_successfully}}
     environment:
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
-      VIGILO_DATABASE_URL: postgres://vigilo:${VIGILO_POSTGRES_PASSWORD}@vigilo-postgres:5432/vigilo
-      VIGILO_API_HOST: 0.0.0.0
-      VIGILO_API_PORT: 3000
-      VIGILO_LOG_LEVEL: ${VIGILO_LOG_LEVEL:-info}
-      VIGILO_MEDIA_URL: http://vigilo-media:3010
-      VIGILO_STORAGE_PATH: /data/recordings
-      VIGILO_RECORDING_SEGMENT_SECONDS: ${VIGILO_RECORDING_SEGMENT_SECONDS:-60}
-      VIGILO_TRUST_PROXY: ${VIGILO_TRUST_PROXY:-false}
-    ports: ["${VIGILO_API_BIND:-127.0.0.1}:3000:3000"]
-    volumes: [vigilo-recordings:/data/recordings:ro]
+      AEGIVUE_DATABASE_URL: postgres://aegivue:${AEGIVUE_POSTGRES_PASSWORD}@aegivue-postgres:5432/aegivue
+      AEGIVUE_API_HOST: 0.0.0.0
+      AEGIVUE_API_PORT: 3000
+      AEGIVUE_LOG_LEVEL: ${AEGIVUE_LOG_LEVEL:-info}
+      AEGIVUE_MEDIA_URL: http://aegivue-media:3010
+      AEGIVUE_STORAGE_PATH: /data/recordings
+      AEGIVUE_RECORDING_SEGMENT_SECONDS: ${AEGIVUE_RECORDING_SEGMENT_SECONDS:-60}
+      AEGIVUE_TRUST_PROXY: ${AEGIVUE_TRUST_PROXY:-false}
+    ports: ["${AEGIVUE_API_BIND:-127.0.0.1}:3000:3000"]
+    volumes: [aegivue-recordings:/data/recordings:ro]
     healthcheck: {test: [CMD, "wget", "-q", "--spider", "http://127.0.0.1:3000/api/v1/health"], interval: 10s, timeout: 3s, retries: 5}
-    networks: [vigilo-internal, vigilo-public]
+    networks: [aegivue-internal, aegivue-public]
 
-  vigilo-webrtc:
+  aegivue-webrtc:
     image: bluenviron/mediamtx:1.19.3
     restart: unless-stopped
     environment:
-      MTX_LOGLEVEL: ${VIGILO_LOG_LEVEL:-info}
+      MTX_LOGLEVEL: ${AEGIVUE_LOG_LEVEL:-info}
       MTX_RTSPTRANSPORTS: tcp
-      MTX_WEBRTCADDITIONALHOSTS: ${VIGILO_WEBRTC_HOST:-127.0.0.1}
+      MTX_WEBRTCADDITIONALHOSTS: ${AEGIVUE_WEBRTC_HOST:-127.0.0.1}
       MTX_WEBRTCLOCALUDPADDRESS: :8189
       MTX_HLSVARIANT: lowLatency
       MTX_HLSSEGMENTDURATION: 1s
       MTX_HLSPARTDURATION: 200ms
     ports:
-      - "${VIGILO_WEBRTC_ICE_BIND:-0.0.0.0}:8189:8189/udp"
-    networks: [vigilo-stream]
+      - "${AEGIVUE_WEBRTC_ICE_BIND:-0.0.0.0}:8189:8189/udp"
+    networks: [aegivue-stream]
 
-  vigilo-media:
-    image: ghcr.io/prinako/vigilo-media:${VIGILO_IMAGE_TAG:-latest}
+  aegivue-media:
+    image: ghcr.io/prinako/aegivue-media:${AEGIVUE_IMAGE_TAG:-latest}
     pull_policy: always
     depends_on:
-      vigilo-migrate: {condition: service_completed_successfully}
-      vigilo-webrtc: {condition: service_started}
+      aegivue-migrate: {condition: service_completed_successfully}
+      aegivue-webrtc: {condition: service_started}
     environment:
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
-      VIGILO_DATABASE_URL: postgres://vigilo:${VIGILO_POSTGRES_PASSWORD}@vigilo-postgres:5432/vigilo
-      VIGILO_LOG_LEVEL: ${VIGILO_LOG_LEVEL:-info}
-      VIGILO_MEDIA_BIND: 0.0.0.0:3010
-      VIGILO_STORAGE_PATH: /data/recordings
-      VIGILO_LIVE_PATH: /tmp/vigilo-live
-      VIGILO_WEBRTC_PUBLISH_URL: rtsp://vigilo-webrtc:8554
-    volumes: [vigilo-recordings:/data/recordings]
+      AEGIVUE_DATABASE_URL: postgres://aegivue:${AEGIVUE_POSTGRES_PASSWORD}@aegivue-postgres:5432/aegivue
+      AEGIVUE_LOG_LEVEL: ${AEGIVUE_LOG_LEVEL:-info}
+      AEGIVUE_MEDIA_BIND: 0.0.0.0:3010
+      AEGIVUE_STORAGE_PATH: /data/recordings
+      AEGIVUE_LIVE_PATH: /tmp/aegivue-live
+      AEGIVUE_WEBRTC_PUBLISH_URL: rtsp://aegivue-webrtc:8554
+    volumes: [aegivue-recordings:/data/recordings]
     healthcheck: {test: [CMD, "wget", "-q", "--spider", "http://127.0.0.1:3010/internal/v1/ready"], interval: 10s, timeout: 3s, retries: 5}
     restart: unless-stopped
-    networks: [vigilo-internal, vigilo-cameras, vigilo-stream]
+    networks: [aegivue-internal, aegivue-cameras, aegivue-stream]
 
-  vigilo-web:
-    image: ghcr.io/prinako/vigilo-web:${VIGILO_IMAGE_TAG:-latest}
+  aegivue-web:
+    image: ghcr.io/prinako/aegivue-web:${AEGIVUE_IMAGE_TAG:-latest}
     pull_policy: always
     depends_on:
-      vigilo-api: {condition: service_healthy}
-      vigilo-media: {condition: service_healthy}
-      vigilo-webrtc: {condition: service_started}
-    ports: ["${VIGILO_WEB_BIND:-127.0.0.1}:8080:80"]
-    networks: [vigilo-public, vigilo-stream]
+      aegivue-api: {condition: service_healthy}
+      aegivue-media: {condition: service_healthy}
+      aegivue-webrtc: {condition: service_started}
+    ports: ["${AEGIVUE_WEB_BIND:-127.0.0.1}:8080:80"]
+    networks: [aegivue-public, aegivue-stream]
 
 networks:
-  vigilo-internal: {internal: true}
-  vigilo-public: {}
-  vigilo-cameras: {}
-  vigilo-stream: {internal: true}
+  aegivue-internal: {internal: true}
+  aegivue-public: {}
+  aegivue-cameras: {}
+  aegivue-stream: {internal: true}
 volumes:
-  vigilo-postgres-data: {}
-  vigilo-recordings: {}
+  aegivue-postgres-data: {}
+  aegivue-recordings: {}
