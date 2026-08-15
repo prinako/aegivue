@@ -21,6 +21,7 @@ pub struct CameraConfig {
     pub username: Option<String>,
     pub password_secret: Option<String>,
     pub main_stream: String,
+    pub sub_stream: Option<String>,
 }
 
 impl CameraConfig {
@@ -365,6 +366,20 @@ async fn probe_duration_ms(path: &Path) -> Option<i64> {
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    #[test]
+    fn recording_always_uses_main_stream() {
+        let camera = CameraConfig {
+            id: "front-door".into(),
+            host: "camera.local".into(),
+            port: 554,
+            username: None,
+            password_secret: None,
+            main_stream: "/main".into(),
+            sub_stream: Some("/sub".into()),
+        };
+        assert_eq!(camera.rtsp_url(), "rtsp://camera.local:554/main");
+    }
 
     #[test]
     fn sequential_segments_have_individual_duration() {
