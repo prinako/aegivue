@@ -25,7 +25,7 @@ Vigilo is an open-source network video recorder built around isolated camera wor
 - Independently supervised camera workers—one failing stream does not stop the others
 - Automatic recovery of enabled cameras after a service restart
 - MP4 segment recording with atomic finalization and metadata indexing
-- Self-hosted, browser-safe HLS live previews with no runtime CDN dependency
+- Low-latency WebRTC live previews with Low-Latency HLS fallback
 - Independently supervised recording and preview processes with bounded recovery backoff
 - Automatic substream selection for lower-bandwidth live previews
 - Paginated recording history and byte-range media streaming
@@ -34,7 +34,7 @@ Vigilo is an open-source network video recorder built around isolated camera wor
 - OpenAPI documentation and health/readiness endpoints
 - Container-first deployment with prebuilt service images
 
-H.264 and H.265 RTSP streams that can be remuxed into MP4 are the current target. Hardware compatibility still needs validation across a wider range of cameras and codecs.
+H.264 and H.265 RTSP streams that can be remuxed into MP4 are the current recording target. Browser live preview is optimized for H.264; browser codec support can vary by platform.
 
 ## Quick start
 
@@ -52,7 +52,9 @@ cd vigilo
 cp .env.example .env
 ```
 
-Replace `VIGILO_POSTGRES_PASSWORD` in `.env` with a long, random password, then start the stack:
+Replace `VIGILO_POSTGRES_PASSWORD` in `.env` with a long, random password. When accessing Vigilo from another device, also set `VIGILO_WEBRTC_HOST` to a LAN IP or DNS name that resolves to the Docker host. WebRTC media uses UDP port `8189`, which must be reachable from the browser.
+
+Then start the stack:
 
 ```sh
 docker compose up -d
@@ -102,11 +104,13 @@ docker compose down
 flowchart LR
     Browser[Web browser] -->|HTTP| Web[Flutter + Nginx]
     Web -->|/api| API[Fastify API]
-    Web -->|/live/camera-id| Media[Rust media engine]
+    Web -->|WHEP handshake| RTC[MediaMTX live gateway]
+    Browser -->|WebRTC ICE / UDP 8189| RTC
+    Web -->|LL-HLS fallback| RTC
     API --> DB[(PostgreSQL)]
-    API -->|private control API| Media
+    API -->|private control API| Media[Rust media engine]
     Media -->|RTSP| Cameras[IP cameras]
-    Media -->|rolling HLS| Web
+    Media -->|RTSP stream-copy publish| RTC
     Media -->|MP4 segments| Storage[(Recording storage)]
     API -->|range requests| Storage
 ```
@@ -115,7 +119,8 @@ flowchart LR
 | --- | --- |
 | [`apps/api`](apps/api) | TypeScript/Fastify control plane for configuration, camera lifecycle, and recording metadata |
 | [`crates/media-engine`](crates/media-engine) | Rust/Tokio media plane with isolated workers and FFmpeg orchestration |
-| [`apps/web`](apps/web) | Flutter dashboard served by Nginx with same-origin API proxying |
+| `vigilo-webrtc` | MediaMTX gateway that converts the internal RTSP publisher into browser WebRTC and LL-HLS fallback |
+| [`apps/web`](apps/web) | Flutter dashboard served by Nginx with same-origin API, WHEP, and HLS proxying |
 | [`crates/vigilo-common`](crates/vigilo-common) | Shared, versionable media contracts |
 | [`database/migrations`](database/migrations) | PostgreSQL schema and migrations; video blobs never enter the database |
 
@@ -125,13 +130,15 @@ FFmpeg writes an active segment as `HH-MM-SS.mp4.partial` under `<storage>/<came
 
 ### Live preview
 
-The media engine owns all RTSP and video processing. Recording always reads the configured main stream, while live preview prefers a non-empty substream and falls back to the main stream when no substream is configured.
+The media engine owns all camera RTSP access. Recording always reads the configured main stream, while live preview prefers a non-empty substream and falls back to the main stream when no substream is configured.
 
-Live video remains H.264 stream-copy and video-only (`-c:v copy -an`). FFmpeg produces a short rolling HLS playlist at `/live/<camera-id>/index.m3u8`; Nginx proxies that path over the private `vigilo-stream` Docker network. The media engine's port `3010` is not published to the host.
+For live preview, FFmpeg keeps H.264 as stream-copy and publishes video-only (`-c:v copy -an`) over the private `vigilo-stream` network to the `vigilo-webrtc` MediaMTX service. The browser performs a same-origin WHEP handshake through Nginx, then receives encrypted WebRTC media directly over UDP `8189`.
 
-Recording and live preview have independent FFmpeg lifecycles. If preview FFmpeg exits, it is restarted with capped backoff while recording continues uninterrupted. Shutdown terminates both processes. Bounded FFmpeg diagnostics are logged for troubleshooting, with RTSP URLs and credential-like values sanitized.
+If WebRTC negotiation or ICE connectivity fails, the dashboard automatically falls back to MediaMTX Low-Latency HLS at `/live/<camera-id>/index.m3u8`. HLS.js is vendored under [`apps/web/web/vendor/hls.js`](apps/web/web/vendor/hls.js), so runtime playback does not depend on an external CDN.
 
-The dashboard uses the pinned HLS.js build vendored under [`apps/web/web/vendor/hls.js`](apps/web/web/vendor/hls.js), with native HLS as a fallback where the browser supports it. Once the container images are available, playback requires no internet connection or external CDN request.
+Recording and live preview have independent FFmpeg lifecycles. If the preview publisher exits, it is restarted with capped backoff while recording continues uninterrupted. Shutdown terminates both processes. Bounded FFmpeg diagnostics are logged for troubleshooting, with RTSP URLs and credential-like values sanitized.
+
+For WebRTC to work through Docker/NAT, set `VIGILO_WEBRTC_HOST` to an address the browser can use to reach the Docker host and allow UDP `8189` to that host. The WHEP HTTP handshake stays behind the normal Vigilo HTTPS endpoint; only the ICE media port is separately exposed.
 
 For more context on the service split, read [ADR 0001: Service boundaries](docs/architecture/0001-service-boundaries.md).
 
@@ -162,6 +169,8 @@ The checked-in [`.env.example`](.env.example) documents all supported deployment
 | `VIGILO_POSTGRES_PASSWORD` | required | PostgreSQL password used by the stack |
 | `VIGILO_API_BIND` | `127.0.0.1` | Host address on which port `3000` is published |
 | `VIGILO_WEB_BIND` | `127.0.0.1` | Host address on which port `8080` is published |
+| `VIGILO_WEBRTC_HOST` | `127.0.0.1` | Host/IP advertised as the WebRTC ICE candidate; set to the Docker host LAN IP or DNS name for remote browsers |
+| `VIGILO_WEBRTC_ICE_BIND` | `0.0.0.0` | Host address on which UDP `8189` is published |
 | `VIGILO_RECORDING_SEGMENT_SECONDS` | `60` | Segment length, from 5 to 3,600 seconds |
 | `VIGILO_LOG_LEVEL` | `info` | Application log verbosity |
 | `VIGILO_IMAGE_TAG` | `latest` | Container image tag to deploy |
@@ -206,7 +215,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml \
 sh scripts/integration-rtsp.sh
 ```
 
-To confirm the live proxy independently, request a playlist for an online camera through the web service:
+The HLS fallback can be tested for an online camera through the web service:
 
 ```sh
 curl --fail http://127.0.0.1:8080/live/front-door/index.m3u8
@@ -216,7 +225,7 @@ See the full [development setup](docs/development/getting-started.md) for the co
 
 ## Security
 
-Vigilo currently has no built-in authentication. Its published ports bind to `127.0.0.1` by default; keep them private or place the application behind an authenticated reverse proxy.
+Vigilo currently has no built-in authentication. Its HTTP ports bind to `127.0.0.1` by default; keep them private or place the application behind an authenticated reverse proxy. WebRTC additionally exposes UDP `8189` for encrypted ICE/DTLS media transport.
 
 Camera passwords are omitted from responses, and FFmpeg diagnostics sanitize RTSP URLs and credential-like values before logging. The current schema still stores passwords in a restricted plaintext column, and FFmpeg receives credential-bearing URLs through process arguments. Encryption, external key-provider integration, and removal of command-line credential exposure are outstanding security work.
 
