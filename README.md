@@ -10,7 +10,7 @@
 [![Docker](https://github.com/prinako/vigilo/actions/workflows/docker.yml/badge.svg)](https://github.com/prinako/vigilo/actions/workflows/docker.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Quick start](#quick-start) · [Architecture](#architecture) · [API](#api) · [Development](#development) · [Security](#security)
+[Quick start](#quick-start) · [Architecture](#architecture) · [API](#api) · [Development](#development) · [Troubleshooting](#troubleshooting) · [Security](#security)
 
 </div>
 
@@ -69,6 +69,8 @@ Once the services are healthy, open:
 | Web dashboard | <http://127.0.0.1:8080> |
 | API documentation | <http://127.0.0.1:3000/docs> |
 | API health check | <http://127.0.0.1:3000/api/v1/health> |
+
+Only the web dashboard (`8080`), API (`3000`), and WebRTC media port (`8189/udp`) are published by default. PostgreSQL, the media engine, and the MediaMTX control endpoints remain on private Docker networks.
 
 Add a camera through the dashboard or the API:
 
@@ -192,9 +194,9 @@ Run the repository checks locally with Node.js 22+, a stable Rust toolchain, and
 
 ```sh
 npm ci --prefix apps/api
-npm --prefix apps/api run typecheck
-npm --prefix apps/api test
-npm --prefix apps/api run build
+npm run typecheck
+npm test
+npm run build
 
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
@@ -222,6 +224,24 @@ curl --fail http://127.0.0.1:8080/live/front-door/index.m3u8
 ```
 
 See the full [development setup](docs/development/getting-started.md) for the concise contributor checklist.
+
+## Troubleshooting
+
+Check container health and recent logs first:
+
+```sh
+docker compose ps
+docker compose logs --tail=100 vigilo-api vigilo-media vigilo-webrtc vigilo-web
+```
+
+If the dashboard works locally but live video fails from another device:
+
+1. Set `VIGILO_WEBRTC_HOST` in `.env` to the Docker host's LAN IP or a DNS name reachable by the browser.
+2. Allow inbound UDP `8189` through the host firewall and any intervening network rules.
+3. Recreate the affected services with `docker compose up -d --force-recreate vigilo-webrtc vigilo-media vigilo-web`.
+4. Test the HLS fallback at `http://<vigilo-host>:8080/live/<camera-id>/index.m3u8`.
+
+If a camera remains offline, verify that its RTSP host, port, credentials, and stream path are reachable from the Docker host. Camera-specific URL examples and validation rules are documented in [Adding an RTSP camera](docs/cameras/rtsp.md).
 
 ## Security
 
