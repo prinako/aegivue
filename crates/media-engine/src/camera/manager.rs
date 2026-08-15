@@ -95,7 +95,7 @@ impl CameraManager {
 
         self.workers.lock().await.remove(id);
         let camera = sqlx::query_as::<_, CameraConfig>(
-            "SELECT id,host,port,username,password_secret,main_stream FROM cameras WHERE id=$1 AND enabled",
+            "SELECT id,host,port,username,password_secret,main_stream,sub_stream FROM cameras WHERE id=$1 AND enabled",
         )
         .bind(id)
         .fetch_optional(&self.database)
