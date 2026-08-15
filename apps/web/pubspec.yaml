@@ -1,5 +1,5 @@
-name: vigilo_web
-description: Vigilo camera and recording client.
+name: aegivue_web
+description: Aegivue camera and recording client.
 publish_to: none
 version: 0.1.0+1
 environment:
