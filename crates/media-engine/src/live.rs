@@ -1,7 +1,6 @@
 use crate::{ffmpeg, recording::recorder::CameraConfig, rtsp};
 use std::{env, path::PathBuf, process::Stdio, time::Duration};
 use tokio::{
-    fs,
     process::{Child, Command},
     time::Instant,
 };
@@ -49,14 +48,13 @@ fn live_stream(camera: &CameraConfig) -> &str {
         .unwrap_or(&camera.main_stream)
 }
 
+fn publish_url(camera: &CameraConfig) -> String {
+    let base = env::var("VIGILO_WEBRTC_PUBLISH_URL")
+        .unwrap_or_else(|_| "rtsp://vigilo-webrtc:8554".into());
+    format!("{}/{}", base.trim_end_matches('/'), camera.id)
+}
+
 pub async fn start(camera: &CameraConfig) -> Result<Child, std::io::Error> {
-    let directory = live_root().join(&camera.id);
-    let _ = fs::remove_dir_all(&directory).await;
-    fs::create_dir_all(&directory).await?;
-
-    let playlist = directory.join("index.m3u8");
-    let segments = directory.join("segment-%06d.ts");
-
     let mut command = Command::new("ffmpeg");
     command
         .args([
@@ -81,19 +79,11 @@ pub async fn start(camera: &CameraConfig) -> Result<Child, std::io::Error> {
             "-c:v",
             "copy",
             "-f",
-            "hls",
-            "-hls_time",
-            "2",
-            "-hls_list_size",
-            "4",
-            "-hls_delete_threshold",
-            "2",
-            "-hls_flags",
-            "delete_segments+append_list+omit_endlist+independent_segments",
-            "-hls_segment_filename",
+            "rtsp",
+            "-rtsp_transport",
+            "tcp",
         ])
-        .arg(segments)
-        .arg(playlist)
+        .arg(publish_url(camera))
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -118,7 +108,7 @@ pub async fn supervise(camera: CameraConfig, shutdown: CancellationToken) {
                     camera.username.as_deref(),
                     camera.password_secret.as_deref(),
                 );
-                tracing::info!(camera_id=%camera.id, "live HLS preview started");
+                tracing::info!(camera_id=%camera.id, "live WebRTC publisher started");
                 let started = Instant::now();
                 let exited = tokio::select! {
                     result = child.wait() => Some(result),
@@ -130,7 +120,7 @@ pub async fn supervise(camera: CameraConfig, shutdown: CancellationToken) {
                 let Some(result) = exited else {
                     break;
                 };
-                tracing::warn!(camera_id=%camera.id, ?result, "live HLS FFmpeg exited; preview restart scheduled");
+                tracing::warn!(camera_id=%camera.id, ?result, "live publisher FFmpeg exited; restart scheduled");
                 attempt = if started.elapsed() >= Duration::from_secs(30) {
                     1
                 } else {
@@ -139,12 +129,12 @@ pub async fn supervise(camera: CameraConfig, shutdown: CancellationToken) {
             }
             Err(error) => {
                 attempt = attempt.saturating_add(1);
-                tracing::warn!(camera_id=%camera.id, %error, "unable to start live HLS preview; retry scheduled");
+                tracing::warn!(camera_id=%camera.id, %error, "unable to start live WebRTC publisher; retry scheduled");
             }
         }
 
         let delay = rtsp::reconnect::delay(attempt);
-        tracing::info!(camera_id=%camera.id, ?delay, "waiting to restart live HLS preview");
+        tracing::info!(camera_id=%camera.id, ?delay, "waiting to restart live publisher");
         tokio::select! {
             () = tokio::time::sleep(delay) => {}
             () = shutdown.cancelled() => break,
@@ -152,6 +142,8 @@ pub async fn supervise(camera: CameraConfig, shutdown: CancellationToken) {
     }
 }
 
+// Kept for compatibility with the existing internal HLS asset route. HLS fallback
+// is now served by MediaMTX through Nginx, so this directory is no longer populated.
 pub fn root() -> PathBuf {
     live_root()
 }
