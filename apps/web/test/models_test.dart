@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vigilo_web/features/cameras/domain/camera.dart';
-import 'package:vigilo_web/features/recordings/domain/recording.dart';
+import 'package:aegivue/features/cameras/domain/camera.dart';
+import 'package:aegivue/features/recordings/domain/recording.dart';
 
 void main() {
   test('recording parses API contract', () {
