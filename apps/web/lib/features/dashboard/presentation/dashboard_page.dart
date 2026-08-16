@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:aegivue/features/cameras/presentation/camera_settings_page.dart';
 import 'package:aegivue/features/dashboard/dashboard_controller.dart';
@@ -23,16 +21,14 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> openCamera([Camera? camera]) async {
     final controller = context.read<DashboardController>();
-    final saved = await Navigator.of(context).push<Camera>(
+    final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) =>
             CameraSettingsPage(repository: controller.cameras, camera: camera),
       ),
     );
-    if (!mounted || saved == null) return;
-
-    controller.upsertCamera(saved);
-    unawaited(controller.refresh());
+    if (!mounted || changed != true) return;
+    await controller.refresh();
   }
 
   @override
