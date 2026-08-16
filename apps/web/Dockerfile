@@ -8,6 +8,8 @@ COPY assets ./assets
 RUN flutter build web --release
 
 FROM nginx:1.29-alpine
+ENV PUID=1000 \
+    PGID=1000
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 RUN mkdir -p /usr/share/nginx-default && \
     cp -a /etc/nginx/. /usr/share/nginx-default/
