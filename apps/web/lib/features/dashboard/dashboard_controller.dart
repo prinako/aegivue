@@ -63,7 +63,14 @@ class DashboardController extends ChangeNotifier {
   }
 
   void upsertCamera(Camera camera) {
-    final previous = _cameraItems.where((item) => item.id == camera.id).firstOrNull;
+    Camera? previous;
+    for (final item in _cameraItems) {
+      if (item.id == camera.id) {
+        previous = item;
+        break;
+      }
+    }
+
     final next = camera.withRuntimeState(
       previous?.runtimeState ?? (camera.enabled ? 'offline' : 'disabled'),
     );
