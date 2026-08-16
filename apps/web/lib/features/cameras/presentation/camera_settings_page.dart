@@ -1,8 +1,7 @@
+import 'package:aegivue/core/api/api_exception.dart';
+import 'package:aegivue/features/cameras/data/camera_repository.dart';
+import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:flutter/material.dart';
-
-import '../../../core/api_client.dart';
-import '../data/camera_repository.dart';
-import '../domain/camera.dart';
 
 class CameraSettingsPage extends StatefulWidget {
   const CameraSettingsPage({super.key, required this.repository, this.camera});
