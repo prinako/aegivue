@@ -4,7 +4,8 @@ import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:aegivue/features/cameras/presentation/camera_settings_page.dart';
 import 'package:aegivue/features/cameras/presentation/live_camera_view.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
-import 'package:aegivue/utils/app_logo.dart';
+import 'package:aegivue/widgets/app_header_widget.dart';
+import 'package:aegivue/widgets/side_nav_widget.dart';
 import 'package:flutter/material.dart';
 
 class App extends StatelessWidget {
@@ -113,14 +114,14 @@ class _DashboardState extends State<Dashboard> {
             child: Row(
               children: [
                 if (desktop)
-                  _SideNav(
+                  SideNavWidget(
                     section: section,
                     onSelect: (value) => setState(() => section = value),
                   ),
                 Expanded(
                   child: Column(
                     children: [
-                      _Header(
+                      AppHeaderWidget(
                         title: section == 0 ? 'Overview' : 'Recordings',
                         onRefresh: refresh,
                         onAdd: () => openCamera(),
@@ -177,176 +178,6 @@ class _DashboardState extends State<Dashboard> {
                 ),
         );
       },
-    );
-  }
-}
-
-class _SideNav extends StatelessWidget {
-  const _SideNav({required this.section, required this.onSelect});
-
-  final int section;
-  final ValueChanged<int> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 230,
-      color: const Color(0xFF0D1016),
-      child: Column(
-        children: [
-           Padding(
-            padding: EdgeInsets.fromLTRB(20, 24, 18, 22),
-            child: Row(
-              children: [
-                AppLogo(
-                  logoIcon: Image.asset(
-                    'aegivue-logo.png',
-                  ),
-                ),
-                SizedBox(width: 11),
-                Text(
-                  'Aegivue',
-                  style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
-                ),
-              ],
-            ),
-          ),
-          _NavButton(
-            icon: Icons.grid_view_rounded,
-            label: 'Overview',
-            selected: section == 0,
-            onTap: () => onSelect(0),
-          ),
-          _NavButton(
-            icon: Icons.video_library_outlined,
-            label: 'Recordings',
-            selected: section == 1,
-            onTap: () => onSelect(1),
-          ),
-          const Spacer(),
-          const Padding(
-            padding: EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Icon(Icons.shield_outlined, size: 17, color: Colors.white38),
-                SizedBox(width: 8),
-                Text(
-                  'Self-hosted & private',
-                  style: TextStyle(color: Colors.white38, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-
-class _NavButton extends StatelessWidget {
-  const _NavButton({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 3),
-      child: Material(
-        color: selected ? const Color(0xFF222746) : Colors.transparent,
-        borderRadius: BorderRadius.circular(13),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(13),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 20,
-                  color: selected ? Colors.white : Colors.white54,
-                ),
-                const SizedBox(width: 11),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? Colors.white : Colors.white60,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.title,
-    required this.onRefresh,
-    required this.onAdd,
-  });
-
-  final String title;
-  final Future<void> Function() onRefresh;
-  final VoidCallback onAdd;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 74,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                ),
-                const Text(
-                  'Security monitoring console',
-                  style: TextStyle(color: Colors.white54, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Refresh',
-            onPressed: onRefresh,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-          const SizedBox(width: 8),
-          FilledButton.icon(
-            onPressed: onAdd,
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Add camera'),
-          ),
-        ],
-      ),
     );
   }
 }
