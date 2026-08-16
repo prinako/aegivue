@@ -24,7 +24,7 @@ class SideNavWidget extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 24, 18, 22),
             child: Row(
               children: [
-                AppLogoWidget(logoIcon: Image.asset('aegivue-logo.png')),
+                AppLogoWidget(logoIcon: Image.asset('assets/aegivue-logo.png')),
                 const SizedBox(width: 11),
                 const Text(
                   'Aegivue',
