@@ -4,7 +4,10 @@ import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:aegivue/features/cameras/presentation/camera_settings_page.dart';
 import 'package:aegivue/features/cameras/presentation/live_camera_view.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
+import 'package:aegivue/widgets/app_error_state_widget.dart';
 import 'package:aegivue/widgets/app_header_widget.dart';
+import 'package:aegivue/widgets/recording_list_widget.dart';
+import 'package:aegivue/widgets/section_title_widget.dart';
 import 'package:aegivue/widgets/side_nav_widget.dart';
 import 'package:flutter/material.dart';
 
@@ -136,7 +139,7 @@ class _DashboardState extends State<Dashboard> {
                               );
                             }
                             if (snapshot.hasError || !snapshot.hasData) {
-                              return _ErrorState(onRetry: refresh);
+                              return AppErrorStateWidget(onRetry: refresh);
                             }
                             final value = snapshot.data!;
                             return section == 0
@@ -254,7 +257,7 @@ class _Overview extends StatelessWidget {
             },
           ),
           const SizedBox(height: 30),
-          _SectionTitle(
+          SectionTitleWidget(
             title: 'Live cameras',
             subtitle: 'Embedded browser-safe live previews',
             action: onAdd,
@@ -291,12 +294,12 @@ class _Overview extends StatelessWidget {
               },
             ),
           const SizedBox(height: 30),
-          const _SectionTitle(
+          const SectionTitleWidget(
             title: 'Recent recordings',
             subtitle: 'Latest finalized camera segments',
           ),
           const SizedBox(height: 12),
-          _RecordingList(recordings: data.recordings.take(6).toList()),
+          RecordingListWidget(recordings: data.recordings.take(6).toList()),
         ],
       ),
     );
@@ -349,11 +352,11 @@ class _Hero extends StatelessWidget {
               ),
             ],
           ),
-          FilledButton.icon(
-            onPressed: onAdd,
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Add camera'),
-          ),
+          // FilledButton.icon(
+          //   onPressed: onAdd,
+          //   icon: const Icon(Icons.add_rounded),
+          //   label: const Text('Add camera'),
+          // ),
         ],
       ),
     );
@@ -504,50 +507,6 @@ class _CameraCard extends StatelessWidget {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({
-    required this.title,
-    required this.subtitle,
-    this.action,
-  });
-
-  final String title;
-  final String subtitle;
-  final VoidCallback? action;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-        if (action != null)
-          TextButton.icon(
-            onPressed: action,
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Add camera'),
-          ),
-      ],
-    );
-  }
-}
-
 class _EmptyCameras extends StatelessWidget {
   const _EmptyCameras({required this.onAdd});
 
@@ -614,126 +573,7 @@ class _Recordings extends StatelessWidget {
             style: TextStyle(color: Colors.white54),
           ),
           const SizedBox(height: 20),
-          _RecordingList(recordings: recordings),
-        ],
-      ),
-    );
-  }
-}
-
-class _RecordingList extends StatelessWidget {
-  const _RecordingList({required this.recordings});
-
-  final List<Recording> recordings;
-
-  @override
-  Widget build(BuildContext context) {
-    if (recordings.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Row(
-            children: [
-              Icon(Icons.video_library_outlined, color: Colors.white38),
-              SizedBox(width: 12),
-              Text(
-                'No finalized recordings yet.',
-                style: TextStyle(color: Colors.white54),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Card(
-      child: Column(
-        children: [
-          for (var i = 0; i < recordings.length; i++) ...[
-            _RecordingRow(recording: recordings[i]),
-            if (i != recordings.length - 1)
-              const Divider(height: 1, indent: 58),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _RecordingRow extends StatelessWidget {
-  const _RecordingRow({required this.recording});
-
-  final Recording recording;
-
-  @override
-  Widget build(BuildContext context) {
-    final time = recording.startTime.toLocal();
-    final stamp =
-        '${_two(time.day)}/${_two(time.month)}/${time.year}  ${_two(time.hour)}:${_two(time.minute)}';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.045),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.play_arrow_rounded, size: 21),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  recording.cameraId,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  stamp,
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            recording.container.toUpperCase(),
-            style: const TextStyle(color: Colors.white38, fontSize: 10),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.onRetry});
-
-  final Future<void> Function() onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.cloud_off_outlined, size: 40, color: Colors.white38),
-          const SizedBox(height: 12),
-          const Text(
-            'Unable to load Vigilo data',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 14),
-          OutlinedButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Try again'),
-          ),
+          RecordingListWidget(recordings: recordings),
         ],
       ),
     );
@@ -743,4 +583,3 @@ class _ErrorState extends StatelessWidget {
 String _label(String state) => state.isEmpty
     ? 'Unknown'
     : '${state[0].toUpperCase()}${state.substring(1)}';
-String _two(int value) => value.toString().padLeft(2, '0');
