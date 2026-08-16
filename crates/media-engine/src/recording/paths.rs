@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, NaiveDateTime, Timelike, Utc};
+use chrono::{DateTime, Datelike, NaiveDateTime, Timelike, Utc, Local};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -11,7 +11,7 @@ pub enum PathError {
 pub fn camera_directory(
     root: &Path,
     camera_key: &str,
-    at: DateTime<Utc>,
+    at: DateTime<Local>,
 ) -> Result<PathBuf, PathError> {
     if camera_key.is_empty()
         || !camera_key
