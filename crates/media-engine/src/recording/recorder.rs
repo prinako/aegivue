@@ -1,5 +1,5 @@
 use super::paths::{camera_directory, segment_time};
-use chrono::Utc;
+use chrono::{Utc, Local};
 use sqlx::PgPool;
 use std::{
     path::{Path, PathBuf},
@@ -83,7 +83,7 @@ impl Recorder {
     }
 
     pub async fn start(&self) -> Result<Child, RecorderError> {
-        let camera_root = camera_directory(&self.storage, &self.camera.id, Utc::now())
+        let camera_root = camera_directory(&self.storage, &self.camera.id, Local::now())
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?
             .ancestors()
             .nth(4)
