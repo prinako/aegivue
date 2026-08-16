@@ -11,10 +11,10 @@ case "$PGID" in
   ''|*[!0-9]*) echo "PGID must be a numeric group ID" >&2; exit 1 ;;
 esac
 
-if [ "$(id -u vigilo)" != "$PUID" ] || [ "$(id -g vigilo)" != "$PGID" ]; then
-  deluser vigilo
-  addgroup -g "$PGID" vigilo
-  adduser -D -H -u "$PUID" -G vigilo vigilo
+if [ "$(id -u aegivue)" != "$PUID" ] || [ "$(id -g aegivue)" != "$PGID" ]; then
+  deluser aegivue
+  addgroup -g "$PGID" aegivue
+  adduser -D -H -u "$PUID" -G aegivue aegivue
 fi
 
 if [ -d /data/recordings ]; then
@@ -22,5 +22,5 @@ if [ -d /data/recordings ]; then
     echo "warning: unable to chown /data/recordings; verify host permissions" >&2
 fi
 
-echo "Starting vigilo-api as PUID=$PUID PGID=$PGID"
+echo "Starting aegivue-api as PUID=$PUID PGID=$PGID"
 exec su-exec "$PUID:$PGID" "$@"
