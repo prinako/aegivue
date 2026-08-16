@@ -3,6 +3,34 @@
 version = 4
 
 [[package]]
+name = "aegivue-common"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "uuid",
+]
+
+[[package]]
+name = "aegivue-media"
+version = "0.1.0"
+dependencies = [
+ "aegivue-common",
+ "axum",
+ "chrono",
+ "rand 0.9.5",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1974,34 +2002,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "vigilo-common"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde",
- "uuid",
-]
-
-[[package]]
-name = "vigilo-media"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "rand 0.9.5",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "vigilo-common",
-]
 
 [[package]]
 name = "wasi"

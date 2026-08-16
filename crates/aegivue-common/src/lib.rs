@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,7 +19,7 @@ pub enum CameraState {
 pub struct CameraStatus {
     pub camera_id: String,
     pub state: CameraState,
-    pub changed_at: DateTime<Utc>,
+    pub changed_at: DateTime<Local>,
     pub reason: Option<String>,
 }
 

@@ -1,5 +1,5 @@
 use super::paths::{camera_directory, segment_time};
-use chrono::Utc;
+use chrono::Local;
 use sqlx::PgPool;
 use std::{
     path::{Path, PathBuf},
@@ -83,7 +83,7 @@ impl Recorder {
     }
 
     pub async fn start(&self) -> Result<Child, RecorderError> {
-        let camera_root = camera_directory(&self.storage, &self.camera.id, Utc::now())
+        let camera_root = camera_directory(&self.storage, &self.camera.id, Local::now())
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?
             .ancestors()
             .nth(4)
@@ -96,10 +96,6 @@ impl Recorder {
         let pattern = camera_root.join("%Y/%m/%d/%H/%H-%M-%S.mp4.partial");
         let mut command = Command::new("ffmpeg");
         command
-            // Rust creates recording directories with UTC timestamps. Force FFmpeg's
-            // strftime expansion to UTC as well so container-local TZ cannot make
-            // it target a different hour/day directory.
-            .env("TZ", "UTC")
             .args([
                 "-hide_banner",
                 "-loglevel",
@@ -242,7 +238,7 @@ impl Recorder {
         &self,
         final_path: &Path,
         file_size: u64,
-        start: chrono::DateTime<Utc>,
+        start: chrono::DateTime<Local>,
         duration_ms: i64,
     ) -> Result<(), sqlx::Error> {
         let end = start + chrono::Duration::milliseconds(duration_ms);
@@ -332,7 +328,7 @@ impl Recorder {
     }
 
     async fn ensure_directories(&self) -> Result<(), std::io::Error> {
-        let now = Utc::now();
+        let now = Local::now();
         for at in [now, now + chrono::Duration::hours(1)] {
             let directory = camera_directory(&self.storage, &self.camera.id, at)
                 .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
@@ -387,7 +383,7 @@ mod tests {
 
     #[test]
     fn sequential_segments_have_individual_duration() {
-        let starts = [0, 60, 120].map(|seconds| Utc.timestamp_opt(seconds, 0).unwrap());
+        let starts = [0, 60, 120].map(|seconds| Local.timestamp_opt(seconds, 0).unwrap());
         for start in starts {
             assert_eq!(
                 (start + chrono::Duration::seconds(60) - start).num_seconds(),
