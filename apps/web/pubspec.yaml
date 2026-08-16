@@ -1,4 +1,4 @@
-name: aegivue_web
+name: aegivue
 description: Aegivue camera and recording client.
 publish_to: none
 version: 0.1.0+1
@@ -14,4 +14,4 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/vigilo-logo.png
+    - assets/

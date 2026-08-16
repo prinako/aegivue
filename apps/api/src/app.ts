@@ -9,7 +9,10 @@ import type { Config } from "./config/env.js";
 
 export async function buildApp(config: Config) {
   const app = Fastify({
-    logger: { level: config.AEGIVUE_LOG_LEVEL, base: { service: "aegivue-api" } },
+    logger: {
+      level: config.AEGIVUE_LOG_LEVEL,
+      base: { service: "aegivue-api" },
+    },
     trustProxy: config.AEGIVUE_TRUST_PROXY,
   });
   await app.register(swagger, {

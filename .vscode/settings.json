@@ -1,0 +1,7 @@
+{
+  "dart.flutterSdkPath": "apps/web/.fvm/versions/3.38.7",
+  "[dart]": {
+    "editor.defaultFormatter": "Dart-Code.dart-code",
+    "editor.formatOnSave": true
+  }
+}
