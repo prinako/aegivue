@@ -96,6 +96,10 @@ impl Recorder {
         let pattern = camera_root.join("%Y/%m/%d/%H/%H-%M-%S.mp4.partial");
         let mut command = Command::new("ffmpeg");
         command
+            // Rust creates recording directories with UTC timestamps. Force FFmpeg's
+            // strftime expansion to UTC as well so container-local TZ cannot make
+            // it target a different hour/day directory.
+            .env("TZ", "UTC")
             .args([
                 "-hide_banner",
                 "-loglevel",
