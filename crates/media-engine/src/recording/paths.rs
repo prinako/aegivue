@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, NaiveDateTime, Timelike, Utc, Local};
+use chrono::{DateTime, Datelike, Local, NaiveDateTime, TimeZone, Timelike};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -31,7 +31,7 @@ pub fn camera_directory(
 pub fn segment_path(
     root: &Path,
     camera_key: &str,
-    at: DateTime<Utc>,
+    at: DateTime<Local>,
 ) -> Result<PathBuf, PathError> {
     Ok(camera_directory(root, camera_key, at)?.join(format!(
         "{:02}-{:02}-{:02}.mp4",
@@ -41,7 +41,7 @@ pub fn segment_path(
     )))
 }
 
-pub fn segment_time(root: &Path, camera_key: &str, path: &Path) -> Option<DateTime<Utc>> {
+pub fn segment_time(root: &Path, camera_key: &str, path: &Path) -> Option<DateTime<Local>> {
     let relative = path.strip_prefix(root.join(camera_key)).ok()?;
     let parts: Vec<_> = relative.iter().map(|part| part.to_str()).collect();
     if parts.len() != 5 || parts.iter().any(Option::is_none) {
@@ -56,15 +56,15 @@ pub fn segment_time(root: &Path, camera_key: &str, path: &Path) -> Option<DateTi
         return None;
     }
     let value = format!(
-        "{}-{}-{}T{}Z",
+        "{}-{}-{}T{}",
         parts[0]?,
         parts[1]?,
         parts[2]?,
         filename.replace('-', ":")
     );
-    NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%SZ")
+    NaiveDateTime::parse_from_str(&value, "%Y-%m-%dT%H:%M:%S")
         .ok()
-        .map(|value| value.and_utc())
+        .and_then(|value| Local.from_local_datetime(&value).earliest())
 }
 
 #[cfg(test)]
@@ -73,9 +73,7 @@ mod tests {
 
     #[test]
     fn path_is_hierarchical() {
-        let at = DateTime::parse_from_rfc3339("2026-08-13T14:20:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        let at = Local.with_ymd_and_hms(2026, 8, 13, 14, 20, 0).unwrap();
         assert_eq!(
             segment_path(Path::new("/data"), "front-door", at).unwrap(),
             PathBuf::from("/data/front-door/2026/08/13/14/14-20-00.mp4")
@@ -84,7 +82,7 @@ mod tests {
 
     #[test]
     fn blocks_traversal() {
-        assert!(segment_path(Path::new("/data"), "../bad", Utc::now()).is_err());
+        assert!(segment_path(Path::new("/data"), "../bad", Local::now()).is_err());
     }
 
     #[test]
@@ -93,30 +91,33 @@ mod tests {
         for (path, expected) in [
             (
                 "cam/2026/08/13/12/12-01-00.mp4.partial",
-                "2026-08-13T12:01:00Z",
+                "2026-08-13T12:01:00",
             ),
             (
                 "cam/2026/08/13/13/13-00-00.mp4.partial",
-                "2026-08-13T13:00:00Z",
+                "2026-08-13T13:00:00",
             ),
             (
                 "cam/2026/08/14/00/00-00-00.mp4.partial",
-                "2026-08-14T00:00:00Z",
+                "2026-08-14T00:00:00",
             ),
             (
                 "cam/2026/09/01/00/00-00-00.mp4.partial",
-                "2026-09-01T00:00:00Z",
+                "2026-09-01T00:00:00",
             ),
             (
                 "cam/2027/01/01/00/00-00-00.mp4.partial",
-                "2027-01-01T00:00:00Z",
+                "2027-01-01T00:00:00",
             ),
         ] {
             assert_eq!(
                 segment_time(root, "cam", &root.join(path)).unwrap(),
-                DateTime::parse_from_rfc3339(expected)
+                Local
+                    .from_local_datetime(
+                        &NaiveDateTime::parse_from_str(expected, "%Y-%m-%dT%H:%M:%S").unwrap(),
+                    )
+                    .earliest()
                     .unwrap()
-                    .with_timezone(&Utc)
             );
         }
     }
@@ -127,9 +128,7 @@ mod tests {
         let path = root.join("cam/2026/08/13/12/12-01-00.mp4");
         assert_eq!(
             segment_time(root, "cam", &path).unwrap(),
-            DateTime::parse_from_rfc3339("2026-08-13T12:01:00Z")
-                .unwrap()
-                .with_timezone(&Utc)
+            Local.with_ymd_and_hms(2026, 8, 13, 12, 1, 0).unwrap()
         );
     }
 }
