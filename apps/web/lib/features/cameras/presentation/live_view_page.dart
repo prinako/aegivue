@@ -89,7 +89,9 @@ class LiveViewPage extends StatelessWidget {
 
   Future<void> _openFullscreen(BuildContext context, Camera camera) {
     return Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => FullscreenLiveCameraPage(camera: camera)),
+      MaterialPageRoute(
+        builder: (_) => FullscreenLiveCameraPage(camera: camera),
+      ),
     );
   }
 }

@@ -106,20 +106,17 @@ class _DashboardPageState extends State<DashboardPage> {
 
     final data = controller.data;
     return switch (section) {
-      1 => LiveViewPage(
-          cameras: data.cameras,
-          onRefresh: controller.refresh,
-        ),
+      1 => LiveViewPage(cameras: data.cameras, onRefresh: controller.refresh),
       2 => RecordingLibrary(
-          recordings: data.recordings,
-          onRefresh: controller.refresh,
-        ),
+        recordings: data.recordings,
+        onRefresh: controller.refresh,
+      ),
       _ => DashboardOverview(
-          data: data,
-          onAdd: () => openCamera(),
-          onEdit: (camera) => openCamera(camera),
-          onRefresh: controller.refresh,
-        ),
+        data: data,
+        onAdd: () => openCamera(),
+        onEdit: (camera) => openCamera(camera),
+        onRefresh: controller.refresh,
+      ),
     };
   }
 }
