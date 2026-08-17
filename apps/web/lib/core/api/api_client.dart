@@ -22,7 +22,16 @@ class ApiClient {
       final response = await _client.request<Object?>(
         '$baseUrl$path',
         data: data,
-        options: Options(method: method, validateStatus: (_) => true),
+        options: Options(
+          method: method,
+          validateStatus: (_) => true,
+          headers: method == 'GET'
+              ? const {
+                  'Cache-Control': 'no-cache, no-store, must-revalidate',
+                  'Pragma': 'no-cache',
+                }
+              : null,
+        ),
       );
       final statusCode = response.statusCode ?? 0;
       if (statusCode < 200 || statusCode >= 300) {

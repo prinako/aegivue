@@ -1,4 +1,3 @@
-import 'package:aegivue/core/api/api_client.dart';
 import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:aegivue/features/cameras/presentation/camera_settings_page.dart';
 import 'package:aegivue/features/dashboard/dashboard_controller.dart';
@@ -8,6 +7,7 @@ import 'package:aegivue/shared/widgets/app_error_state_widget.dart';
 import 'package:aegivue/shared/widgets/app_header_widget.dart';
 import 'package:aegivue/shared/widgets/side_nav_widget.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -17,35 +17,24 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  late final DashboardController controller;
-  late Future<DashboardData> data;
   int section = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    controller = DashboardController(ApiClient());
-    data = controller.load();
-  }
-
-  Future<void> refresh() async {
-    final next = controller.load();
-    setState(() => data = next);
-    await next;
-  }
-
   Future<void> openCamera([Camera? camera]) async {
+    final controller = context.read<DashboardController>();
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) =>
             CameraSettingsPage(repository: controller.cameras, camera: camera),
       ),
     );
-    if (changed == true) await refresh();
+    if (!mounted || changed != true) return;
+    await controller.refresh();
   }
 
   @override
   Widget build(BuildContext context) {
+    final controller = context.watch<DashboardController>();
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final desktop = constraints.maxWidth >= 920;
@@ -63,36 +52,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     children: [
                       AppHeaderWidget(
                         title: section == 0 ? 'Overview' : 'Recordings',
-                        onRefresh: refresh,
+                        onRefresh: controller.refresh,
                         onAdd: () => openCamera(),
                       ),
-                      Expanded(
-                        child: FutureBuilder<DashboardData>(
-                          future: data,
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData && !snapshot.hasError) {
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
-                            }
-                            if (snapshot.hasError || !snapshot.hasData) {
-                              return AppErrorStateWidget(onRetry: refresh);
-                            }
-                            final value = snapshot.data!;
-                            return section == 0
-                                ? DashboardOverview(
-                                    data: value,
-                                    onAdd: () => openCamera(),
-                                    onEdit: (camera) => openCamera(camera),
-                                    onRefresh: refresh,
-                                  )
-                                : RecordingLibrary(
-                                    recordings: value.recordings,
-                                    onRefresh: refresh,
-                                  );
-                          },
-                        ),
-                      ),
+                      Expanded(child: _buildContent(controller)),
                     ],
                   ),
                 ),
@@ -119,5 +82,28 @@ class _DashboardPageState extends State<DashboardPage> {
         );
       },
     );
+  }
+
+  Widget _buildContent(DashboardController controller) {
+    if (controller.loading && !controller.loaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (controller.error != null && !controller.loaded) {
+      return AppErrorStateWidget(onRetry: controller.load);
+    }
+
+    final data = controller.data;
+    return section == 0
+        ? DashboardOverview(
+            data: data,
+            onAdd: () => openCamera(),
+            onEdit: (camera) => openCamera(camera),
+            onRefresh: controller.refresh,
+          )
+        : RecordingLibrary(
+            recordings: data.recordings,
+            onRefresh: controller.refresh,
+          );
   }
 }
