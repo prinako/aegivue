@@ -1,3 +1,4 @@
+import 'package:aegivue/core/utils/formatters.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:flutter/material.dart';
 
@@ -47,10 +48,6 @@ class _RecordingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final time = recording.startTime.toLocal();
-    final stamp =
-        '${_two(time.day)}/${_two(time.month)}/${time.year}  ${_two(time.hour)}:${_two(time.minute)}';
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
       child: Row(
@@ -75,7 +72,7 @@ class _RecordingRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  stamp,
+                  Formatters.recordingTimestamp(recording.startTime),
                   style: const TextStyle(color: Colors.white54, fontSize: 11),
                 ),
               ],
@@ -90,5 +87,3 @@ class _RecordingRow extends StatelessWidget {
     );
   }
 }
-
-String _two(int value) => value.toString().padLeft(2, '0');

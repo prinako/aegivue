@@ -1,5 +1,6 @@
-import 'package:aegivue/widgets/app_logo_widget.dart';
-import 'package:aegivue/widgets/nav_button_widget.dart';
+import 'package:aegivue/core/theme/app_colors.dart';
+import 'package:aegivue/shared/widgets/app_logo_widget.dart';
+import 'package:aegivue/shared/widgets/nav_button_widget.dart';
 import 'package:flutter/material.dart';
 
 class SideNavWidget extends StatelessWidget {
@@ -16,16 +17,16 @@ class SideNavWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 230,
-      color: const Color(0xFF0D1016),
+      color: AppColors.recessedSurface,
       child: Column(
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(20, 24, 18, 22),
+            padding: const EdgeInsets.fromLTRB(20, 24, 18, 22),
             child: Row(
               children: [
-                AppLogoWidget(logoIcon: Image.asset('aegivue-logo.png')),
-                SizedBox(width: 11),
-                Text(
+                AppLogoWidget(logoIcon: Image.asset('assets/aegivue-logo.png')),
+                const SizedBox(width: 11),
+                const Text(
                   'Aegivue',
                   style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
                 ),
@@ -39,10 +40,16 @@ class SideNavWidget extends StatelessWidget {
             onTap: () => onSelect(0),
           ),
           NavButtonWidget(
-            icon: Icons.video_library_outlined,
-            label: 'Recordings',
+            icon: Icons.live_tv_rounded,
+            label: 'Live view',
             selected: section == 1,
             onTap: () => onSelect(1),
+          ),
+          NavButtonWidget(
+            icon: Icons.video_library_outlined,
+            label: 'Recordings',
+            selected: section == 2,
+            onTap: () => onSelect(2),
           ),
           const Spacer(),
           const Padding(
