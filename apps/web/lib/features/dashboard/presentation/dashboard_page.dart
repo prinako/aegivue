@@ -1,5 +1,6 @@
 import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:aegivue/features/cameras/presentation/camera_settings_page.dart';
+import 'package:aegivue/features/cameras/presentation/live_view_page.dart';
 import 'package:aegivue/features/dashboard/dashboard_controller.dart';
 import 'package:aegivue/features/dashboard/presentation/widgets/dashboard_overview.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_library.dart';
@@ -51,7 +52,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   child: Column(
                     children: [
                       AppHeaderWidget(
-                        title: section == 0 ? 'Overview' : 'Recordings',
+                        title: _titleForSection(section),
                         onRefresh: controller.refresh,
                         onAdd: () => openCamera(),
                       ),
@@ -74,6 +75,10 @@ class _DashboardPageState extends State<DashboardPage> {
                       label: 'Overview',
                     ),
                     NavigationDestination(
+                      icon: Icon(Icons.live_tv_rounded),
+                      label: 'Live',
+                    ),
+                    NavigationDestination(
                       icon: Icon(Icons.video_library_outlined),
                       label: 'Recordings',
                     ),
@@ -83,6 +88,12 @@ class _DashboardPageState extends State<DashboardPage> {
       },
     );
   }
+
+  String _titleForSection(int value) => switch (value) {
+    1 => 'Live view',
+    2 => 'Recordings',
+    _ => 'Overview',
+  };
 
   Widget _buildContent(DashboardController controller) {
     if (controller.loading && !controller.loaded) {
@@ -94,16 +105,21 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     final data = controller.data;
-    return section == 0
-        ? DashboardOverview(
-            data: data,
-            onAdd: () => openCamera(),
-            onEdit: (camera) => openCamera(camera),
-            onRefresh: controller.refresh,
-          )
-        : RecordingLibrary(
-            recordings: data.recordings,
-            onRefresh: controller.refresh,
-          );
+    return switch (section) {
+      1 => LiveViewPage(
+          cameras: data.cameras,
+          onRefresh: controller.refresh,
+        ),
+      2 => RecordingLibrary(
+          recordings: data.recordings,
+          onRefresh: controller.refresh,
+        ),
+      _ => DashboardOverview(
+          data: data,
+          onAdd: () => openCamera(),
+          onEdit: (camera) => openCamera(camera),
+          onRefresh: controller.refresh,
+        ),
+    };
   }
 }
