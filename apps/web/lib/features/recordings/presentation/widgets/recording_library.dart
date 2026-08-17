@@ -122,7 +122,10 @@ class _SelectedRecording extends StatelessWidget {
               spacing: 14,
               runSpacing: 8,
               children: [
-                _Detail(label: 'Container', value: recording.container.toUpperCase()),
+                _Detail(
+                  label: 'Container',
+                  value: recording.container.toUpperCase(),
+                ),
                 if (recording.videoCodec != null)
                   _Detail(label: 'Video', value: recording.videoCodec!),
                 if (recording.audioCodec != null)
@@ -133,7 +136,10 @@ class _SelectedRecording extends StatelessWidget {
                     value: '${recording.width}×${recording.height}',
                   ),
                 if (recording.fps != null)
-                  _Detail(label: 'FPS', value: recording.fps!.toStringAsFixed(1)),
+                  _Detail(
+                    label: 'FPS',
+                    value: recording.fps!.toStringAsFixed(1),
+                  ),
               ],
             ),
           ),

@@ -149,7 +149,8 @@ class DashboardOverview extends StatelessWidget {
                             ),
                             IconButton(
                               tooltip: 'Close',
-                              onPressed: () => Navigator.of(dialogContext).pop(),
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
                               icon: const Icon(Icons.close_rounded),
                             ),
                           ],
