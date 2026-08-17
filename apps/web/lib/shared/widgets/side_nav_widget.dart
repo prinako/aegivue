@@ -40,10 +40,16 @@ class SideNavWidget extends StatelessWidget {
             onTap: () => onSelect(0),
           ),
           NavButtonWidget(
-            icon: Icons.video_library_outlined,
-            label: 'Recordings',
+            icon: Icons.live_tv_rounded,
+            label: 'Live view',
             selected: section == 1,
             onTap: () => onSelect(1),
+          ),
+          NavButtonWidget(
+            icon: Icons.video_library_outlined,
+            label: 'Recordings',
+            selected: section == 2,
+            onTap: () => onSelect(2),
           ),
           const Spacer(),
           const Padding(
