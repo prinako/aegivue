@@ -8,11 +8,25 @@ void main() {
       'id': 'recording-id',
       'cameraId': 'camera-id',
       'startTime': '2026-08-13T14:20:00.000Z',
+      'endTime': '2026-08-13T14:21:00.000Z',
       'container': 'mp4',
-      'playbackUrl': '/media',
+      'playbackUrl': '/api/v1/recordings/recording-id/media',
+      'fileSize': 10485760,
+      'durationMs': 60000,
+      'videoCodec': 'h264',
+      'audioCodec': 'aac',
+      'width': 1920,
+      'height': 1080,
+      'fps': 25,
     });
     expect(item.cameraId, 'camera-id');
     expect(item.startTime.isUtc, isTrue);
+    expect(item.durationMs, 60000);
+    expect(item.fileSize, 10485760);
+    expect(item.videoCodec, 'h264');
+    expect(item.width, 1920);
+    expect(item.height, 1080);
+    expect(item.fps, 25);
   });
 
   test('camera parses editable configuration from API', () {
