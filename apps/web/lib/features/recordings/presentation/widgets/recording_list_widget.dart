@@ -1,18 +1,26 @@
 import 'package:aegivue/core/utils/formatters.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
+import 'package:aegivue/features/recordings/presentation/widgets/recording_player.dart';
 import 'package:flutter/material.dart';
 
 class RecordingListWidget extends StatelessWidget {
-  const RecordingListWidget({super.key, required this.recordings});
+  const RecordingListWidget({
+    super.key,
+    required this.recordings,
+    required this.onOpen,
+    this.selectedId,
+  });
 
   final List<Recording> recordings;
+  final ValueChanged<Recording> onOpen;
+  final String? selectedId;
 
   @override
   Widget build(BuildContext context) {
     if (recordings.isEmpty) {
       return const Card(
         child: Padding(
-          padding: EdgeInsets.all(20),
+          padding: EdgeInsets.all(24),
           child: Row(
             children: [
               Icon(Icons.video_library_outlined, color: Colors.white38),
@@ -27,62 +35,184 @@ class RecordingListWidget extends StatelessWidget {
       );
     }
 
-    return Card(
-      child: Column(
-        children: [
-          for (var i = 0; i < recordings.length; i++) ...[
-            _RecordingRow(recording: recordings[i]),
-            if (i != recordings.length - 1)
-              const Divider(height: 1, indent: 58),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 1180
+            ? 4
+            : constraints.maxWidth >= 850
+            ? 3
+            : constraints.maxWidth >= 540
+            ? 2
+            : 1;
+        final width = (constraints.maxWidth - ((columns - 1) * 14)) / columns;
+
+        return Wrap(
+          spacing: 14,
+          runSpacing: 14,
+          children: [
+            for (final recording in recordings)
+              SizedBox(
+                width: width,
+                child: _RecordingCard(
+                  recording: recording,
+                  selected: recording.id == selectedId,
+                  onTap: () => onOpen(recording),
+                ),
+              ),
           ],
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
-class _RecordingRow extends StatelessWidget {
-  const _RecordingRow({required this.recording});
+class _RecordingCard extends StatelessWidget {
+  const _RecordingCard({
+    required this.recording,
+    required this.selected,
+    required this.onTap,
+  });
 
   final Recording recording;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.045),
-              borderRadius: BorderRadius.circular(10),
+    final theme = Theme.of(context);
+    final duration = _duration(recording.durationMs);
+    final resolution = recording.width != null && recording.height != null
+        ? '${recording.width}×${recording.height}'
+        : null;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: selected
+              ? theme.colorScheme.primary.withValues(alpha: 0.8)
+              : Colors.white.withValues(alpha: 0.06),
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  RecordingPlayer(
+                    playbackUrl: recording.playbackUrl,
+                    thumbnail: true,
+                  ),
+                  Positioned(
+                    right: 10,
+                    bottom: 9,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.72),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Text(
+                        duration,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: const Icon(Icons.play_arrow_rounded, size: 21),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  recording.cameraId,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  Formatters.recordingTimestamp(recording.startTime),
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
-                ),
-              ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 13),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          recording.cameraId,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.play_circle_outline_rounded, size: 19),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    Formatters.recordingTimestamp(recording.startTime),
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+                  const SizedBox(height: 9),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      _MetaChip(recording.container.toUpperCase()),
+                      if (resolution != null) _MetaChip(resolution),
+                      if (recording.fileSize != null)
+                        _MetaChip(_fileSize(recording.fileSize!)),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          Text(
-            recording.container.toUpperCase(),
-            style: const TextStyle(color: Colors.white38, fontSize: 10),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _duration(int? milliseconds) {
+    if (milliseconds == null || milliseconds <= 0) return '--:--';
+    final totalSeconds = (milliseconds / 1000).round();
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  static String _fileSize(int bytes) {
+    if (bytes >= 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / 1024).toStringAsFixed(0)} KB';
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  const _MetaChip(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.045),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(color: Colors.white54, fontSize: 9),
       ),
     );
   }
