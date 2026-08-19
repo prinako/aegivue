@@ -81,9 +81,6 @@ impl CameraManager {
     }
 
     pub async fn start(&self, id: &str) -> Result<CameraState, String> {
-        // Serialize lifecycle changes for the same camera while still allowing different cameras
-        // to start or stop concurrently. Without this guard, concurrent API/reconciliation calls
-        // can spawn duplicate FFmpeg workers or let a late start escape a completed stop.
         let lifecycle_lock = self.lifecycle_lock(id).await;
         let _lifecycle_guard = lifecycle_lock.lock().await;
 
@@ -95,7 +92,20 @@ impl CameraManager {
 
         self.workers.lock().await.remove(id);
         let camera = sqlx::query_as::<_, CameraConfig>(
-            "SELECT id,host,port,username,password_secret,main_stream,sub_stream FROM cameras WHERE id=$1 AND enabled",
+            r#"
+            SELECT
+                c.id,
+                c.host,
+                c.port,
+                c.username,
+                c.password_secret,
+                c.main_stream,
+                c.sub_stream,
+                COALESCE(rc.enabled, false) AS recording_enabled
+            FROM cameras c
+            LEFT JOIN recording_configs rc ON rc.camera_id = c.id
+            WHERE c.id = $1 AND c.enabled
+            "#,
         )
         .bind(id)
         .fetch_optional(&self.database)
