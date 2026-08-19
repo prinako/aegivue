@@ -1,5 +1,6 @@
 import 'package:aegivue/core/utils/formatters.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
+import 'package:aegivue/features/recordings/presentation/recording_download.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_player.dart';
 import 'package:flutter/material.dart';
 
@@ -135,7 +136,7 @@ class _RecordingCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 13),
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 13),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -149,7 +150,12 @@ class _RecordingCard extends StatelessWidget {
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      IconButton(
+                        tooltip: 'Download recording',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => RecordingDownload.start(recording),
+                        icon: const Icon(Icons.download_rounded, size: 19),
+                      ),
                       const Icon(Icons.play_circle_outline_rounded, size: 19),
                     ],
                   ),
