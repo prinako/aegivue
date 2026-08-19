@@ -1,6 +1,7 @@
 import 'package:aegivue/core/api/api_client.dart';
 import 'package:aegivue/features/cameras/data/camera_repository.dart';
 import 'package:aegivue/features/cameras/domain/camera.dart';
+import 'package:aegivue/features/recordings/data/recording_page.dart';
 import 'package:aegivue/features/recordings/data/recording_repository.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:flutter/foundation.dart';
@@ -17,6 +18,8 @@ class DashboardController extends ChangeNotifier {
     : cameras = CameraRepository(api),
       recordings = RecordingRepository(api);
 
+  static const int _recordingPageSize = 25;
+
   final CameraRepository cameras;
   final RecordingRepository recordings;
 
@@ -25,12 +28,17 @@ class DashboardController extends ChangeNotifier {
   bool _loading = false;
   Object? _error;
   bool _loaded = false;
+  int _recordingPage = 1;
+  bool _hasMoreRecordings = false;
+  bool _loadingMoreRecordings = false;
 
   List<Camera> get cameraItems => _cameraItems;
   List<Recording> get recordingItems => _recordingItems;
   bool get loading => _loading;
   Object? get error => _error;
   bool get loaded => _loaded;
+  bool get hasMoreRecordings => _hasMoreRecordings;
+  bool get loadingMoreRecordings => _loadingMoreRecordings;
   DashboardData get data => DashboardData(_cameraItems, _recordingItems);
 
   Future<void> load() => _reload(showLoading: !_loaded);
@@ -47,17 +55,45 @@ class DashboardController extends ChangeNotifier {
     try {
       final values = await Future.wait<Object>([
         cameras.list(),
-        recordings.list(),
+        recordings.listPage(page: 1, pageSize: _recordingPageSize),
       ]);
       _cameraItems = List<Camera>.unmodifiable(values[0] as List<Camera>);
-      _recordingItems = List<Recording>.unmodifiable(
-        values[1] as List<Recording>,
-      );
+      final page = values[1] as RecordingPage;
+      _recordingItems = List<Recording>.unmodifiable(page.items);
+      _recordingPage = page.page;
+      _hasMoreRecordings = page.hasMore;
       _loaded = true;
     } catch (error) {
       _error = error;
     } finally {
       _loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMoreRecordings() async {
+    if (_loadingMoreRecordings || !_hasMoreRecordings) return;
+
+    _loadingMoreRecordings = true;
+    notifyListeners();
+
+    try {
+      final nextPage = await recordings.listPage(
+        page: _recordingPage + 1,
+        pageSize: _recordingPageSize,
+      );
+      final existingIds = _recordingItems.map((item) => item.id).toSet();
+      final nextItems = [
+        ..._recordingItems,
+        ...nextPage.items.where((item) => !existingIds.contains(item.id)),
+      ];
+      _recordingItems = List<Recording>.unmodifiable(nextItems);
+      _recordingPage = nextPage.page;
+      _hasMoreRecordings = nextPage.hasMore;
+    } catch (error) {
+      _error = error;
+    } finally {
+      _loadingMoreRecordings = false;
       notifyListeners();
     }
   }

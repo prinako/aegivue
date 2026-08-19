@@ -110,6 +110,9 @@ class _DashboardPageState extends State<DashboardPage> {
       2 => RecordingLibrary(
         recordings: data.recordings,
         onRefresh: controller.refresh,
+        onLoadMore: controller.loadMoreRecordings,
+        hasMore: controller.hasMoreRecordings,
+        loadingMore: controller.loadingMoreRecordings,
       ),
       _ => DashboardOverview(
         data: data,
