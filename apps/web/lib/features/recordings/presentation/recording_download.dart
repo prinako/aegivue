@@ -22,7 +22,10 @@ abstract final class RecordingDownload {
       local.minute.toString().padLeft(2, '0'),
       local.second.toString().padLeft(2, '0'),
     ].join('-');
-    final camera = recording.cameraId.replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '-');
+    final camera = recording.cameraId.replaceAll(
+      RegExp(r'[^A-Za-z0-9_-]+'),
+      '-',
+    );
     final extension = recording.container.toLowerCase();
     return 'aegivue-$camera-$timestamp.$extension';
   }
