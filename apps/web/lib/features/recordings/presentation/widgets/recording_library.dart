@@ -9,17 +9,38 @@ class RecordingLibrary extends StatefulWidget {
     super.key,
     required this.recordings,
     required this.onRefresh,
+    required this.onLoadMore,
+    required this.hasMore,
+    required this.loadingMore,
   });
 
   final List<Recording> recordings;
   final Future<void> Function() onRefresh;
+  final Future<void> Function() onLoadMore;
+  final bool hasMore;
+  final bool loadingMore;
 
   @override
   State<RecordingLibrary> createState() => _RecordingLibraryState();
 }
 
 class _RecordingLibraryState extends State<RecordingLibrary> {
+  final ScrollController _scrollController = ScrollController();
   Recording? selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    super.dispose();
+  }
 
   @override
   void didUpdateWidget(covariant RecordingLibrary oldWidget) {
@@ -29,11 +50,25 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
     selected = matches.isEmpty ? null : matches.first;
   }
 
+  void _handleScroll() {
+    if (!_scrollController.hasClients ||
+        widget.loadingMore ||
+        !widget.hasMore) {
+      return;
+    }
+
+    final position = _scrollController.position;
+    if (position.extentAfter <= 600) {
+      widget.onLoadMore();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
       onRefresh: widget.onRefresh,
       child: ListView(
+        controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 44),
         children: [
@@ -61,6 +96,18 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
             selectedId: selected?.id,
             onOpen: (recording) => setState(() => selected = recording),
           ),
+          if (widget.loadingMore) ...[
+            const SizedBox(height: 24),
+            const Center(child: CircularProgressIndicator()),
+          ] else if (!widget.hasMore && widget.recordings.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            const Center(
+              child: Text(
+                'All recordings loaded',
+                style: TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ),
+          ],
         ],
       ),
     );
