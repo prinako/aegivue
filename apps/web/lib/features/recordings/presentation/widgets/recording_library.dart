@@ -1,5 +1,6 @@
 import 'package:aegivue/core/utils/formatters.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
+import 'package:aegivue/features/recordings/presentation/recording_download.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_list_widget.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_player.dart';
 import 'package:flutter/material.dart';
@@ -80,7 +81,7 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
           ),
           const SizedBox(height: 5),
           const Text(
-            'Browse, preview, and play finalized Aegivue footage.',
+            'Browse, preview, play, and download finalized Aegivue footage.',
             style: TextStyle(color: Colors.white54),
           ),
           if (selected != null) ...[
@@ -150,6 +151,11 @@ class _SelectedRecording extends StatelessWidget {
                       ),
                     ],
                   ),
+                ),
+                IconButton(
+                  tooltip: 'Download recording',
+                  onPressed: () => RecordingDownload.start(recording),
+                  icon: const Icon(Icons.download_rounded),
                 ),
                 IconButton(
                   tooltip: 'Close player',
