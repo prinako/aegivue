@@ -1,6 +1,7 @@
 import 'package:aegivue/core/api/api_client.dart';
 import 'package:aegivue/features/cameras/data/camera_repository.dart';
 import 'package:aegivue/features/cameras/domain/camera.dart';
+import 'package:aegivue/features/recordings/data/recording_page.dart';
 import 'package:aegivue/features/recordings/data/recording_repository.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:flutter/foundation.dart';
@@ -52,19 +53,15 @@ class DashboardController extends ChangeNotifier {
     _error = null;
 
     try {
-      final recordingPage = recordings.listPage(
-        page: 1,
-        pageSize: _recordingPageSize,
-      );
       final values = await Future.wait<Object>([
         cameras.list(),
-        recordingPage,
+        recordings.listPage(page: 1, pageSize: _recordingPageSize),
       ]);
       _cameraItems = List<Camera>.unmodifiable(values[0] as List<Camera>);
-      final page = values[1] as dynamic;
-      _recordingItems = List<Recording>.unmodifiable(page.items as List<Recording>);
-      _recordingPage = page.page as int;
-      _hasMoreRecordings = page.hasMore as bool;
+      final page = values[1] as RecordingPage;
+      _recordingItems = List<Recording>.unmodifiable(page.items);
+      _recordingPage = page.page;
+      _hasMoreRecordings = page.hasMore;
       _loaded = true;
     } catch (error) {
       _error = error;
