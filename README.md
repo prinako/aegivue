@@ -17,7 +17,7 @@
 > [!IMPORTANT]
 > Aegivue is under active development. It is suitable for HomeLab, development, and controlled testing environments, but it is not yet ready to be exposed directly to the public internet without an authenticated reverse proxy and additional hardening.
 
-Aegivue is an open-source NVR built around isolated camera workers, stream-copy recording, PostgreSQL metadata, browser-friendly live streaming, and a Flutter frontend. Video stays on local or mounted storage while the API and database manage configuration, runtime state, and recording metadata.
+Aegivue is an open-source NVR built around isolated camera workers, stream-copy recording, PostgreSQL metadata, browser-friendly live streaming, motion-event processing, and a Flutter frontend. Video stays on local or mounted storage while the API and database manage configuration, runtime state, recordings, and event metadata.
 
 ## Features
 
@@ -34,9 +34,13 @@ Aegivue is an open-source NVR built around isolated camera workers, stream-copy 
 - Automatic cleanup of expired recording files and metadata
 - Paginated recording history with playback, downloads, and expiry controls
 - HTTP byte-range media delivery for efficient seeking and playback
+- First-pass motion detection using configurable stream, analysis FPS, and sensitivity
+- Persisted motion events with peak scores, timing, and detector metadata
+- Paginated **Motion events** timeline in Flutter
+- Events API with pagination plus event-kind and camera filters
 - Camera lifecycle controls and runtime status reporting through a REST API
 - Flutter dashboard with Provider + ChangeNotifier state management
-- Feature-based Flutter project structure for cameras, dashboard, and recordings
+- Feature-based Flutter project structure for cameras, dashboard, events, and recordings
 - OpenAPI documentation plus health/readiness endpoints
 - Container-first deployment with Docker Compose and prebuilt GHCR images
 
@@ -44,7 +48,7 @@ H.264 and H.265 RTSP streams that can be remuxed into MP4 are the current record
 
 ## Project status
 
-Aegivue has moved beyond the initial prototype stage. The core recording, API, live streaming, Docker, and Flutter foundations are in place, while security, event processing, and advanced automation are still being developed.
+Aegivue has moved beyond the initial prototype stage. The core recording, API, live streaming, motion-event, Docker, and Flutter foundations are in place, while security, advanced event processing, and automation are still being developed.
 
 | Area | Status | Notes |
 | --- | --- | --- |
@@ -54,11 +58,14 @@ Aegivue has moved beyond the initial prototype stage. The core recording, API, l
 | Recording retention | Working | Per-camera retention periods, per-recording expiry, background cleanup |
 | Live viewing | Working | WebRTC first, LL-HLS fallback |
 | Live camera wall | Working | Adaptive grid with focused camera view |
+| Motion detection | Working foundation | Supervised frame-difference detector with configurable stream, FPS, and sensitivity |
+| Event indexing | Working foundation | Persisted motion events with timing, peak score, metadata, API pagination, and Flutter timeline |
 | Flutter architecture | Working | Feature-based layout with shared/core modules |
-| Flutter state management | Working foundation | Provider + ChangeNotifier for dashboard state |
+| Flutter state management | Working foundation | Provider + ChangeNotifier for cameras, recordings, and event history |
 | Recording library | Working foundation | Paginated browsing, playback, downloads, and expiry controls |
 | Authentication / authorization | Not implemented | Keep the app private or behind authenticated access |
-| Motion detection | Planned / early | Configuration fields exist; processing is not yet complete |
+| Motion zones | Planned | Schema exists; detector does not yet apply inclusion/exclusion polygons |
+| Motion-triggered recording | Planned | Recording mode/pre/post-event settings exist; event-driven capture is not yet implemented |
 | AI detection | Planned | Future dedicated processing service |
 | Notifications | Planned | Event-driven alerts are not yet implemented |
 
@@ -152,6 +159,7 @@ More focused guides live in [`docs`](docs/README.md):
 | [Development setup](docs/development/getting-started.md) | Prerequisites, local containers, exact CI checks, and integration testing |
 | [Upgrades and database migrations](docs/operations/upgrades.md) | Safe upgrades, schema verification, migration troubleshooting, and customized deployments |
 | [Adding an RTSP camera](docs/cameras/rtsp.md) | Stream configuration, WebRTC/HLS verification, and camera troubleshooting |
+| [Motion detection and events](docs/motion/events.md) | Motion settings, detector behavior, event lifecycle, Events API, Flutter timeline, limitations, and troubleshooting |
 | [Service-boundaries ADR](docs/architecture/0001-service-boundaries.md) | Component ownership, design decisions, and operational consequences |
 
 ## Architecture
@@ -171,12 +179,13 @@ flowchart LR
     Media -->|RTSP| Cameras[IP cameras]
     Media -->|RTSP publish| RTC
     Media -->|MP4 segments| Storage
+    Media -->|motion events| DB
 ```
 
 | Component | Responsibility |
 | --- | --- |
-| [`apps/api`](apps/api) | TypeScript/Fastify control plane for configuration, camera lifecycle, recording metadata, and media-service coordination |
-| [`crates/media-engine`](crates/media-engine) | Rust/Tokio media plane with isolated camera workers, FFmpeg orchestration, and retention cleanup |
+| [`apps/api`](apps/api) | TypeScript/Fastify control plane for configuration, camera lifecycle, recording/event metadata, and media-service coordination |
+| [`crates/media-engine`](crates/media-engine) | Rust/Tokio media plane with isolated camera workers, FFmpeg orchestration, motion analysis, and retention cleanup |
 | [`crates/aegivue-common`](crates/aegivue-common) | Shared Rust contracts used by the media components |
 | `aegivue-webrtc` | MediaMTX gateway for browser WebRTC and LL-HLS fallback |
 | [`apps/web`](apps/web) | Flutter dashboard served by Nginx with same-origin API, WHEP, and HLS proxying |
@@ -185,6 +194,16 @@ flowchart LR
 PostgreSQL's camera configuration is the durable desired state. The media engine reconciles enabled cameras and keeps per-camera workers isolated.
 
 FFmpeg writes active recording segments as `.mp4.partial` files under the camera storage hierarchy. Completed non-empty segments are atomically finalized to `.mp4` and indexed in PostgreSQL. Cameras can retain recordings indefinitely or assign an expiry from a per-camera retention period; the media engine periodically removes expired, unprotected recordings from both storage and PostgreSQL.
+
+## Motion detection and events
+
+For cameras with motion detection enabled, the Rust media engine starts a supervised motion-analysis task alongside the live publisher and recorder. The detector uses the configured motion stream (`main` or `sub`), analysis FPS, and sensitivity.
+
+The current first-pass detector uses FFmpeg to produce 160×90 grayscale frames, compares consecutive frames, and computes a changed-pixel ratio. When that score crosses the sensitivity-derived trigger threshold, Aegivue opens a `motion` event in PostgreSQL. While motion remains active, the event keeps the highest observed score; after roughly two seconds of quiet frames, the event is closed.
+
+Detector metadata records the analysis stream, FPS, sensitivity, detector version, and analysis resolution. Events are available through `/api/v1/events` and in the Flutter **Motion events** timeline.
+
+This is a working foundation rather than the final motion system. Whole-frame scoring is currently used; motion/exclusion zones are not yet applied. Motion events are also not yet linked to recordings, and `recording.mode = motion` does not yet implement pre-event/post-event triggered capture. See [Motion detection and events](docs/motion/events.md) for the current behavior and limitations.
 
 ## Live preview
 
@@ -220,6 +239,7 @@ apps/web/lib/
 ├── features/
 │   ├── cameras/
 │   ├── dashboard/
+│   ├── events/
 │   └── recordings/
 ├── shared/
 └── main.dart
@@ -239,7 +259,7 @@ Provider
 Flutter UI
 ```
 
-The controller owns the dashboard camera and recording state and notifies listening widgets when data changes. This replaced the earlier one-shot `FutureBuilder`-driven dashboard flow and gives the frontend a cleaner base for optimistic camera updates and additional live state later.
+The controller owns dashboard camera, recording, and event state and notifies listening widgets when data changes. This replaced the earlier one-shot `FutureBuilder`-driven dashboard flow and gives the frontend a cleaner base for additional live state and event-driven features.
 
 Current navigation:
 
@@ -247,6 +267,7 @@ Current navigation:
 Overview
 Live view
 Recordings
+Motion events
 ```
 
 ## API
@@ -265,6 +286,9 @@ The API is rooted at `/api/v1`. Interactive OpenAPI documentation is available a
 | `GET` | `/recordings/:id` | Read recording metadata |
 | `PATCH` | `/recordings/:id/expiry` | Set or clear a recording's expiry time |
 | `GET` | `/recordings/:id/media` | Stream media with HTTP byte-range support |
+| `GET` | `/events?page=1&pageSize=25` | List persisted events |
+| `GET` | `/events?kind=motion&cameraId=:cameraId` | Filter events by kind and camera |
+| `GET` | `/events/:id` | Read one event with timing, score, camera, and metadata |
 
 Storage paths and camera passwords are not returned by the API.
 
@@ -353,6 +377,8 @@ If the dashboard works but live video fails from another device:
 
 If a camera remains offline, verify its RTSP host, port, credentials, and stream path from the network where the media engine runs.
 
+If motion detection is enabled but no events appear, verify the configured motion stream is reachable, inspect `aegivue-media` logs for the detector startup/trigger messages, and check the **Motion events** view or `/api/v1/events?kind=motion`. See [Motion detection and events](docs/motion/events.md) for detector-specific troubleshooting.
+
 If logs report that a required PostgreSQL table or column does not exist, treat it as a schema-version problem rather than a camera problem. Follow [Upgrades and database migrations](docs/operations/upgrades.md) to verify the active database and migration history.
 
 ## Security
@@ -372,12 +398,15 @@ Near-term priorities:
 - Application authentication and authorization
 - Encrypted camera secret storage
 - Deployment hardening with versioned migration artifacts and schema-version checks
+- Motion zones and exclusion-zone scoring
+- Motion-triggered recording with pre-event and post-event capture
+- Event-to-recording linking and playback
+- Motion false-positive suppression and stronger temporal filtering
 - More complete Provider-driven camera mutations in Flutter
 - Improved recording-library UX
 - Browser-native fullscreen support for focused live cameras
 - Storage quotas, usage reporting, and protected-recording controls
 - ONVIF discovery and camera configuration
-- Motion detection and event indexing
 - Optional AI detection service
 - Notifications and alert integrations
 - Broader real-camera and codec validation
