@@ -131,10 +131,7 @@ impl CameraWorker {
         }
 
         let live_shutdown = self.shutdown.child_token();
-        let live_task = tokio::spawn(live::supervise(
-            self.camera.clone(),
-            live_shutdown.clone(),
-        ));
+        let live_task = tokio::spawn(live::supervise(self.camera.clone(), live_shutdown.clone()));
 
         tracing::info!(
             camera_id=%self.camera.id,
