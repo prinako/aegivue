@@ -242,6 +242,46 @@ async function handleMediaAction(
   }
 }
 
+async function stopMediaForDelete(
+  app: FastifyInstance,
+  reply: FastifyReply,
+  id: string,
+): Promise<boolean> {
+  try {
+    await app.media.stop(id);
+    return true;
+  } catch (error) {
+    if (error instanceof MediaClientError && error.kind === "not_found") {
+      return true;
+    }
+    mediaFailure(reply, error);
+    return false;
+  }
+}
+
+async function removeCameraOrDisable(
+  repo: CameraRepository,
+  reply: FastifyReply,
+  id: string,
+) {
+  try {
+    const removed = await repo.remove(id);
+    if (!removed) {
+      return await reply.code(404).send({ code: "NOT_FOUND", message: "Camera not found" });
+    }
+    return await reply.code(204).send();
+  } catch (error) {
+    if ((error as { code?: string }).code === "23503") {
+      await repo.setEnabled(id, false);
+      return reply.code(409).send({
+        code: "CAMERA_HAS_RECORDINGS",
+        message: "Camera has recordings and was disabled instead of deleted",
+      });
+    }
+    throw error;
+  }
+}
+
 // --- Routes ---
 
 export const cameraRoutes: FastifyPluginAsync = async (app) => {
@@ -326,30 +366,7 @@ export const cameraRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete<{ Params: { id: string } }>("/:id", async (request, reply) => {
     const { id } = request.params;
-
-    try {
-      await app.media.stop(id);
-    } catch (error) {
-      if (!(error instanceof MediaClientError && error.kind === "not_found")) {
-        return mediaFailure(reply, error);
-      }
-    }
-
-    try {
-      const removed = await repo.remove(id);
-      if (!removed) {
-        return await reply.code(404).send({ code: "NOT_FOUND", message: "Camera not found" });
-      }
-      return await reply.code(204).send();
-    } catch (error) {
-      if ((error as { code?: string }).code === "23503") {
-        await repo.setEnabled(id, false);
-        return reply.code(409).send({
-          code: "CAMERA_HAS_RECORDINGS",
-          message: "Camera has recordings and was disabled instead of deleted",
-        });
-      }
-      throw error;
-    }
+    if (!(await stopMediaForDelete(app, reply, id))) return;
+    return removeCameraOrDisable(repo, reply, id);
   });
 };
