@@ -305,12 +305,7 @@ impl CameraWorker {
     }
 
     async fn finish_motion_session(&self, mut session: MotionRecordingSession) {
-        ffmpeg::terminate(
-            &mut session.child,
-            &self.camera.id,
-            "motion-recording",
-        )
-        .await;
+        ffmpeg::terminate(&mut session.child, &self.camera.id, "motion-recording").await;
         session.recorder.finalize().await;
 
         if let Err(error) = sqlx::query(
