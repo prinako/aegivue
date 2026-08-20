@@ -24,10 +24,22 @@ pub struct CameraConfig {
     pub sub_stream: Option<String>,
     pub recording_enabled: bool,
     pub retention_days: Option<i32>,
+    pub motion_enabled: bool,
+    pub motion_stream: String,
+    pub motion_fps: f64,
+    pub motion_sensitivity: f64,
 }
 
 impl CameraConfig {
-    fn rtsp_url(&self) -> String {
+    pub(crate) fn rtsp_url(&self) -> String {
+        self.rtsp_url_for_stream("main")
+    }
+
+    pub(crate) fn motion_rtsp_url(&self) -> String {
+        self.rtsp_url_for_stream(&self.motion_stream)
+    }
+
+    fn rtsp_url_for_stream(&self, stream: &str) -> String {
         let authority = match (&self.username, &self.password_secret) {
             (Some(user), Some(password)) => {
                 format!("{}:{}@", percent_encode(user), percent_encode(password))
@@ -35,10 +47,12 @@ impl CameraConfig {
             (Some(user), None) => format!("{}@", percent_encode(user)),
             _ => String::new(),
         };
-        format!(
-            "rtsp://{authority}{}:{}{}",
-            self.host, self.port, self.main_stream
-        )
+        let path = if stream == "sub" {
+            self.sub_stream.as_deref().unwrap_or(&self.main_stream)
+        } else {
+            &self.main_stream
+        };
+        format!("rtsp://{authority}{}:{}{path}", self.host, self.port)
     }
 }
 
@@ -383,8 +397,13 @@ mod tests {
             sub_stream: Some("/sub".into()),
             recording_enabled: true,
             retention_days: Some(30),
+            motion_enabled: true,
+            motion_stream: "sub".into(),
+            motion_fps: 5.0,
+            motion_sensitivity: 0.65,
         };
         assert_eq!(camera.rtsp_url(), "rtsp://camera.local:554/main");
+        assert_eq!(camera.motion_rtsp_url(), "rtsp://camera.local:554/sub");
     }
 
     #[test]

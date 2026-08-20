@@ -3,6 +3,7 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { databasePlugin } from "./database/plugin.js";
 import { cameraRoutes } from "./modules/cameras/routes.js";
+import { eventRoutes } from "./modules/events/routes.js";
 import { recordingRoutes } from "./modules/recordings/routes.js";
 import { MediaClient } from "./clients/media-client.js";
 import type { Config } from "./config/env.js";
@@ -49,6 +50,7 @@ export async function buildApp(config: Config) {
     }
   });
   await app.register(cameraRoutes, { prefix: "/api/v1/cameras" });
+  await app.register(eventRoutes, { prefix: "/api/v1/events" });
   await app.register(recordingRoutes, {
     prefix: "/api/v1/recordings",
     storagePath: config.AEGIVUE_STORAGE_PATH,

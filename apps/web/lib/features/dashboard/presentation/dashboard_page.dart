@@ -3,6 +3,7 @@ import 'package:aegivue/features/cameras/presentation/camera_settings_page.dart'
 import 'package:aegivue/features/cameras/presentation/live_view_page.dart';
 import 'package:aegivue/features/dashboard/dashboard_controller.dart';
 import 'package:aegivue/features/dashboard/presentation/widgets/dashboard_overview.dart';
+import 'package:aegivue/features/events/presentation/motion_events_page.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_library.dart';
 import 'package:aegivue/shared/widgets/app_error_state_widget.dart';
 import 'package:aegivue/shared/widgets/app_header_widget.dart';
@@ -82,6 +83,10 @@ class _DashboardPageState extends State<DashboardPage> {
                       icon: Icon(Icons.video_library_outlined),
                       label: 'Recordings',
                     ),
+                    NavigationDestination(
+                      icon: Icon(Icons.motion_photos_on_outlined),
+                      label: 'Motion',
+                    ),
                   ],
                 ),
         );
@@ -92,6 +97,7 @@ class _DashboardPageState extends State<DashboardPage> {
   String _titleForSection(int value) => switch (value) {
     1 => 'Live view',
     2 => 'Recordings',
+    3 => 'Motion events',
     _ => 'Overview',
   };
 
@@ -114,6 +120,13 @@ class _DashboardPageState extends State<DashboardPage> {
         onSetExpiry: controller.setRecordingExpiry,
         hasMore: controller.hasMoreRecordings,
         loadingMore: controller.loadingMoreRecordings,
+      ),
+      3 => MotionEventsPage(
+        events: data.events,
+        onRefresh: controller.refresh,
+        onLoadMore: controller.loadMoreEvents,
+        hasMore: controller.hasMoreEvents,
+        loadingMore: controller.loadingMoreEvents,
       ),
       _ => DashboardOverview(
         data: data,
