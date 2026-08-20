@@ -32,9 +32,10 @@ const motion = z.object({
   sensitivity: z.number().min(0).max(1).default(0.65),
 });
 
-function validateMotionSubStream(
+function validateMotionConfiguration(
   value: {
     connection: z.infer<typeof connection>;
+    recording: z.infer<typeof recording>;
     motion: z.infer<typeof motion>;
   },
   ctx: z.RefinementCtx,
@@ -50,6 +51,18 @@ function validateMotionSubStream(
       message: "required when motion uses the sub stream",
     });
   }
+
+  if (
+    value.recording.enabled &&
+    value.recording.mode === "motion" &&
+    !value.motion.enabled
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["motion", "enabled"],
+      message: "motion detection must be enabled when recording mode is motion",
+    });
+  }
 }
 
 export const createCamera = z
@@ -61,7 +74,7 @@ export const createCamera = z
     recording: recording.default({}),
     motion: motion.default({}),
   })
-  .superRefine(validateMotionSubStream);
+  .superRefine(validateMotionConfiguration);
 
 export const updateCamera = z
   .object({
@@ -71,7 +84,7 @@ export const updateCamera = z
     recording,
     motion,
   })
-  .superRefine(validateMotionSubStream);
+  .superRefine(validateMotionConfiguration);
 
 export type CreateCamera = z.infer<typeof createCamera>;
 export type UpdateCamera = z.infer<typeof updateCamera>;
