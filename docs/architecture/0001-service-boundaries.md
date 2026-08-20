@@ -49,3 +49,9 @@ structured logs.
   process would.
 - Authentication and encrypted camera-secret storage remain separate hardening
   concerns; service isolation does not replace either control.
+
+## Related documentation
+
+- [System architecture](overview.md)
+- [Configuration reference](../reference/configuration.md)
+- [Troubleshooting runbook](../operations/troubleshooting.md)

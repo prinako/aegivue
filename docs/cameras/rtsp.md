@@ -96,3 +96,9 @@ docker compose up -d --force-recreate
 Keep `.env` and camera credentials out of version control. Aegivue does not yet
 provide built-in authentication, so keep the dashboard and API on a trusted
 network or behind an authenticated reverse proxy.
+
+## Related guides
+
+- [Configuration reference](../reference/configuration.md)
+- [Motion detection and events](../motion/events.md)
+- [Troubleshooting runbook](../operations/troubleshooting.md)

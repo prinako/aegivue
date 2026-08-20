@@ -19,6 +19,11 @@ The current detector:
 
 The detector is supervised independently. A detector failure schedules a restart and should not stop the camera recorder or live-view publisher.
 
+When recording mode is `motion`, an active motion event also controls the event
+recorder. Aegivue promotes completed segments from the rolling pre-event buffer,
+records while the event is active, continues through the configured post-event
+window, and links the resulting recording metadata to the event.
+
 ## Camera settings
 
 Motion settings are part of the existing camera configuration:
@@ -95,6 +100,23 @@ The Flutter dashboard includes a **Motion events** destination on desktop and mo
 
 The view supports refresh and paginated/infinite-scroll loading.
 
+## Motion-triggered recording
+
+Set `recording.mode` to `motion` to avoid running the main recorder continuously.
+The media engine then:
+
+1. keeps a rolling, one-second-segment pre-event buffer when
+   `preEventSeconds > 0`;
+2. starts the main recorder when it observes an open motion event;
+3. promotes closed prebuffer segments that fall inside the configured window;
+4. continues recording for `postEventSeconds` after the detector closes the event;
+5. finalizes segments and links them to the triggering event.
+
+The prebuffer is transient and stored below `.prebuffer` in the recording storage.
+Its newest segment is never promoted because FFmpeg may still be writing it. If
+the prebuffer cannot start, motion recording can still begin at the trigger, but
+pre-event footage will be unavailable.
+
 ## Current limitations
 
 This is the first motion-processing implementation. The following are not yet complete:
@@ -103,11 +125,7 @@ This is the first motion-processing implementation. The following are not yet co
 - illumination-change and environmental false-positive suppression;
 - configurable temporal debounce / quiet period;
 - recovery of stale open events after unexpected process termination;
-- linking motion events to recordings;
-- actual motion-triggered recording mode with pre-event and post-event capture;
 - object/AI detection and event enrichment.
-
-The existing `recording.mode = motion`, pre-event, and post-event settings should therefore be treated as configuration groundwork until event-triggered recording is implemented.
 
 ## Troubleshooting
 

@@ -1,73 +1,84 @@
 <div align="center">
 
-<img src="apps/web/assets/aegivue-logo.svg" alt="Aegivue logo" width="220">
+<img src="apps/web/assets/aegivue-logo.svg" alt="Aegivue" width="220">
 
 # Aegivue
 
-**A self-hosted network video recorder focused on reliable RTSP recording, low-latency live viewing, and a modern Flutter control surface.**
+**A self-hosted network video recorder for reliable RTSP capture, low-latency
+live viewing, and motion-aware recording.**
 
 [![CI](https://github.com/prinako/aegivue/actions/workflows/ci.yml/badge.svg)](https://github.com/prinako/aegivue/actions/workflows/ci.yml)
 [![Docker](https://github.com/prinako/aegivue/actions/workflows/docker.yml/badge.svg)](https://github.com/prinako/aegivue/actions/workflows/docker.yml)
-[![License](https://img.shields.io/badge/license-see%20LICENSE-blue.svg)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![Flutter 3.38.7](https://img.shields.io/badge/Flutter-3.38.7-02569B?logo=flutter)](https://flutter.dev/)
+[![Rust](https://img.shields.io/badge/media-Rust-000000?logo=rust)](https://www.rust-lang.org/)
 
-[Features](#features) · [Project status](#project-status) · [Quick start](#quick-start) · [Documentation](#documentation) · [Architecture](#architecture) · [API](#api) · [Development](#development) · [Security](#security) · [Roadmap](#roadmap)
+[Quick start](#quick-start) · [Features](#features) · [Architecture](#architecture) ·
+[Documentation](#documentation) · [Development](#development) · [Roadmap](#roadmap)
 
 </div>
 
-> [!IMPORTANT]
-> Aegivue is under active development. It is suitable for HomeLab, development, and controlled testing environments, but it is not yet ready to be exposed directly to the public internet without an authenticated reverse proxy and additional hardening.
+> [!WARNING]
+> Aegivue is under active development and does not yet include built-in
+> authentication. Use it on a trusted network or behind an authenticated reverse
+> proxy. Do not expose the dashboard or API directly to the public internet.
 
-Aegivue is an open-source NVR built around isolated camera workers, stream-copy recording, PostgreSQL metadata, browser-friendly live streaming, motion-event processing, and a Flutter frontend. Video stays on local or mounted storage while the API and database manage configuration, runtime state, recordings, and event metadata.
+Aegivue keeps video on infrastructure you control. A Rust media engine isolates
+camera and FFmpeg workloads, a Fastify API manages configuration and metadata,
+MediaMTX delivers browser-friendly live streams, and Flutter provides the control
+surface. PostgreSQL stores searchable state while finalized media remains on a
+dedicated recording volume.
+
+## Why Aegivue?
+
+- **Failure isolation:** each camera runs in a supervised worker, so one unreliable
+  stream does not take down the rest of the system.
+- **Efficient capture:** compatible H.264/H.265 streams are remuxed into MP4
+  without mandatory video transcoding.
+- **Fast live view:** browsers use WebRTC first, with Low-Latency HLS as a
+  fallback.
+- **Event-aware recording:** motion mode supports rolling pre-event footage,
+  configurable post-event capture, and event-to-recording linkage.
+- **Local ownership:** recordings and operational metadata stay in your Docker
+  volumes or mounted storage.
+- **Open interfaces:** camera control, recordings, events, health, and media are
+  exposed through a documented REST API.
 
 ## Features
 
-- RTSP recording through FFmpeg without mandatory transcoding
-- Per-camera worker isolation so one failing stream does not stop the others
-- Automatic recovery of enabled cameras after service restarts
-- MP4 segment recording with atomic finalization and metadata indexing
-- Low-latency WebRTC live viewing with Low-Latency HLS fallback
-- Dedicated **Live view** tab with an adaptive camera grid
-- Intelligent grid sizing based on viewport size and number of registered cameras
-- Click-to-focus camera viewing in a dedicated large viewer
-- Automatic substream preference for lower-bandwidth live viewing
-- Per-camera recording controls and configurable retention periods
-- Automatic cleanup of expired recording files and metadata
-- Paginated recording history with playback, downloads, and expiry controls
-- HTTP byte-range media delivery for efficient seeking and playback
-- First-pass motion detection using configurable stream, analysis FPS, and sensitivity
-- Persisted motion events with peak scores, timing, and detector metadata
-- Paginated **Motion events** timeline in Flutter
-- Events API with pagination plus event-kind and camera filters
-- Camera lifecycle controls and runtime status reporting through a REST API
-- Flutter dashboard with Provider + ChangeNotifier state management
-- Feature-based Flutter project structure for cameras, dashboard, events, and recordings
-- OpenAPI documentation plus health/readiness endpoints
-- Container-first deployment with Docker Compose and prebuilt GHCR images
+| Area | Capabilities |
+| --- | --- |
+| Cameras | RTSP configuration, enable/disable controls, runtime status, automatic worker recovery |
+| Recording | Continuous or motion-triggered MP4 segments, atomic finalization, pre/post-event capture |
+| Playback | Paginated library, downloads, HTTP range requests, expiry controls |
+| Retention | Per-camera retention, protected recordings, automatic file and metadata cleanup |
+| Live view | WebRTC, LL-HLS fallback, substream preference, adaptive camera grid, focused viewer |
+| Motion | Supervised frame-difference detector, configurable stream/FPS/sensitivity, persisted events |
+| Platform | Flutter web UI, Fastify/OpenAPI control plane, Rust/Tokio media engine, PostgreSQL |
+| Deployment | Docker Compose, private service networks, health checks, prebuilt GHCR images |
 
-H.264 and H.265 RTSP streams that can be remuxed into MP4 are the current recording target. Browser live viewing is optimized for H.264; codec support varies by browser and platform.
+H.264 and H.265 camera streams that FFmpeg can remux into MP4 are the current
+recording target. H.264 is recommended for browser live viewing because H.265
+support varies across browsers and operating systems.
 
 ## Project status
 
-Aegivue has moved beyond the initial prototype stage. The core recording, API, live streaming, motion-event, Docker, and Flutter foundations are in place, while security, advanced event processing, and automation are still being developed.
+Aegivue is an **early-stage HomeLab NVR** with a working end-to-end foundation.
+Core camera management, continuous recording, live viewing, retention, motion
+events, and motion-triggered capture are implemented. Security hardening, advanced
+detection, and broader hardware validation remain in progress.
 
-| Area | Status | Notes |
-| --- | --- | --- |
-| Docker / service architecture | Mature foundation | API, media engine, MediaMTX, PostgreSQL, Flutter/Nginx |
-| Camera configuration | Working | Create, edit, enable/disable, runtime state |
-| Continuous recording | Working | FFmpeg stream-copy segments with metadata indexing |
-| Recording retention | Working | Per-camera retention periods, per-recording expiry, background cleanup |
-| Live viewing | Working | WebRTC first, LL-HLS fallback |
-| Live camera wall | Working | Adaptive grid with focused camera view |
-| Motion detection | Working foundation | Supervised frame-difference detector with configurable stream, FPS, and sensitivity |
-| Event indexing | Working foundation | Persisted motion events with timing, peak score, metadata, API pagination, and Flutter timeline |
-| Flutter architecture | Working | Feature-based layout with shared/core modules |
-| Flutter state management | Working foundation | Provider + ChangeNotifier for cameras, recordings, and event history |
-| Recording library | Working foundation | Paginated browsing, playback, downloads, and expiry controls |
-| Authentication / authorization | Not implemented | Keep the app private or behind authenticated access |
-| Motion zones | Planned | Schema exists; detector does not yet apply inclusion/exclusion polygons |
-| Motion-triggered recording | Planned | Recording mode/pre/post-event settings exist; event-driven capture is not yet implemented |
-| AI detection | Planned | Future dedicated processing service |
-| Notifications | Planned | Event-driven alerts are not yet implemented |
+| Status | Area |
+| --- | --- |
+| ✅ Available | Camera CRUD and lifecycle control |
+| ✅ Available | Continuous recording and indexed playback |
+| ✅ Available | WebRTC live view with LL-HLS fallback |
+| ✅ Available | Retention and expiry cleanup |
+| 🧪 Foundation | Motion detection, event timeline, and triggered recording |
+| 🚧 Planned | Authentication, authorization, and encrypted secret storage |
+| 🚧 Planned | Motion zones, AI detection, and notifications |
+
+See the [roadmap](#roadmap) for current priorities.
 
 ## Quick start
 
@@ -75,9 +86,9 @@ Aegivue has moved beyond the initial prototype stage. The core recording, API, l
 
 - Docker Engine
 - Docker Compose v2
-- An RTSP camera reachable from the Docker host (optional for initial setup)
+- An RTSP camera reachable from the Docker host, optional for initial startup
 
-Clone the repository and create your environment file:
+### 1. Configure
 
 ```sh
 git clone https://github.com/prinako/aegivue.git
@@ -85,32 +96,39 @@ cd aegivue
 cp .env.example .env
 ```
 
-Set a strong `AEGIVUE_POSTGRES_PASSWORD` in `.env`.
+Set a long, random `AEGIVUE_POSTGRES_PASSWORD` in `.env`. If another device will
+open live video, also set `AEGIVUE_WEBRTC_HOST` to the Aegivue host's reachable LAN
+address or DNS name.
 
-If browsers on other devices will use WebRTC, set `AEGIVUE_WEBRTC_HOST` to the LAN IP or DNS name that reaches the Aegivue host. UDP port `8189` must also be reachable from those clients.
+Validate the effective configuration:
 
-Start the stack:
+```sh
+docker compose config --quiet
+```
+
+### 2. Start
 
 ```sh
 docker compose up -d
 docker compose ps
-curl http://127.0.0.1:3000/api/v1/health
+curl --fail http://127.0.0.1:3000/api/v1/health
 ```
 
-Open:
-
-| Service | URL |
+| Service | Default address |
 | --- | --- |
-| Web dashboard | <http://127.0.0.1:8080> |
-| API documentation | <http://127.0.0.1:3000/docs> |
-| API health check | <http://127.0.0.1:3000/api/v1/health> |
+| Dashboard | <http://127.0.0.1:8080> |
+| OpenAPI UI | <http://127.0.0.1:3000/docs> |
+| Health endpoint | <http://127.0.0.1:3000/api/v1/health> |
 
-By default, PostgreSQL, the media engine, and MediaMTX control endpoints stay on private Docker networks. The web dashboard and API bind to localhost unless changed in `.env`; WebRTC media uses UDP `8189`.
+The API and dashboard bind to localhost by default. WebRTC media uses UDP port
+`8189`; remote browsers must be able to reach that port.
 
-Add a camera through the Flutter dashboard or directly through the API:
+### 3. Add a camera
+
+Use **Cameras** in the dashboard or call the API:
 
 ```sh
-curl -X POST http://127.0.0.1:3000/api/v1/cameras \
+curl --fail-with-body -X POST http://127.0.0.1:3000/api/v1/cameras \
   -H 'content-type: application/json' \
   -d '{
     "id": "front-door",
@@ -127,201 +145,113 @@ curl -X POST http://127.0.0.1:3000/api/v1/cameras \
   }'
 ```
 
-Camera URL formats vary by manufacturer. See [Adding an RTSP camera](docs/cameras/rtsp.md) for the supported configuration shape.
+RTSP paths vary by manufacturer. Follow the [camera setup guide](docs/cameras/rtsp.md)
+for codec guidance, live-view verification, and troubleshooting.
 
-Stop Aegivue without deleting its database or recordings:
+### 4. Stop safely
 
 ```sh
 docker compose down
 ```
 
-### Upgrading an existing installation
-
-Aegivue application images and PostgreSQL migrations must be upgraded together. The stock migration service currently reads migration files from the local repository checkout, so pulling newer GHCR images without updating the checkout can leave the database schema behind the running application.
-
-Before upgrading, back up PostgreSQL and the recording volume. Then update the checkout, pull images, run migrations explicitly, and recreate the stack:
-
-```sh
-git pull
-docker compose pull
-docker compose run --rm aegivue-migrate
-docker compose up -d
-```
-
-If a camera starts reporting errors such as `column ... does not exist`, verify the active database's `schema_migrations` table before restarting services repeatedly. See [Upgrades and database migrations](docs/operations/upgrades.md) for schema verification, customized deployments, and recovery guidance.
-
-## Documentation
-
-More focused guides live in [`docs`](docs/README.md):
-
-| Guide | Covers |
-| --- | --- |
-| [Development setup](docs/development/getting-started.md) | Prerequisites, local containers, exact CI checks, and integration testing |
-| [Upgrades and database migrations](docs/operations/upgrades.md) | Safe upgrades, schema verification, migration troubleshooting, and customized deployments |
-| [Adding an RTSP camera](docs/cameras/rtsp.md) | Stream configuration, WebRTC/HLS verification, and camera troubleshooting |
-| [Motion detection and events](docs/motion/events.md) | Motion settings, detector behavior, event lifecycle, Events API, Flutter timeline, limitations, and troubleshooting |
-| [Service-boundaries ADR](docs/architecture/0001-service-boundaries.md) | Component ownership, design decisions, and operational consequences |
+This keeps the PostgreSQL and recording volumes. Do not add `--volumes` unless you
+intend to delete data managed by Compose.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    Browser[Browser / Flutter Web] -->|HTTP| Web[Flutter + Nginx]
-    Web -->|/api| API[Fastify API]
-    Web -->|WHEP signaling| RTC[MediaMTX]
-    Browser -->|WebRTC ICE / UDP 8189| RTC
-    Web -->|LL-HLS fallback| RTC
+    Camera[RTSP cameras] -->|RTSP| Media[Rust media engine]
+    Media -->|MP4 segments| Storage[(Recording volume)]
+    Media -->|events + metadata| DB[(PostgreSQL)]
+    Media -->|RTSP publish| Gateway[MediaMTX]
 
-    API --> DB[(PostgreSQL)]
-    API -->|private control API| Media[Rust media engine]
-    API -->|range requests| Storage[(Recording storage)]
-
-    Media -->|RTSP| Cameras[IP cameras]
-    Media -->|RTSP publish| RTC
-    Media -->|MP4 segments| Storage
-    Media -->|motion events| DB
+    Browser[Browser] --> Web[Flutter + Nginx]
+    Web -->|REST| API[Fastify API]
+    Web -->|WHEP / LL-HLS| Gateway
+    Browser -->|WebRTC UDP| Gateway
+    API --> DB
+    API -->|private control API| Media
+    API -->|range reads| Storage
 ```
 
 | Component | Responsibility |
 | --- | --- |
-| [`apps/api`](apps/api) | TypeScript/Fastify control plane for configuration, camera lifecycle, recording/event metadata, and media-service coordination |
-| [`crates/media-engine`](crates/media-engine) | Rust/Tokio media plane with isolated camera workers, FFmpeg orchestration, motion analysis, and retention cleanup |
-| [`crates/aegivue-common`](crates/aegivue-common) | Shared Rust contracts used by the media components |
-| `aegivue-webrtc` | MediaMTX gateway for browser WebRTC and LL-HLS fallback |
-| [`apps/web`](apps/web) | Flutter dashboard served by Nginx with same-origin API, WHEP, and HLS proxying |
-| [`database/migrations`](database/migrations) | PostgreSQL schema and migrations; video blobs are not stored in PostgreSQL |
+| [`apps/web`](apps/web) | Flutter dashboard and Nginx same-origin proxy |
+| [`apps/api`](apps/api) | Fastify control plane, validation, OpenAPI, and media delivery |
+| [`crates/media-engine`](crates/media-engine) | Camera supervision, FFmpeg, recording, motion analysis, and retention |
+| [`crates/aegivue-common`](crates/aegivue-common) | Shared Rust contracts |
+| MediaMTX | WebRTC and LL-HLS stream delivery |
+| [`database/migrations`](database/migrations) | PostgreSQL schema evolution |
 
-PostgreSQL's camera configuration is the durable desired state. The media engine reconciles enabled cameras and keeps per-camera workers isolated.
+PostgreSQL is the durable desired state. The media engine reconciles enabled
+cameras into isolated workers. Active segments use a `.mp4.partial` suffix and are
+atomically finalized before they are indexed and exposed for playback.
 
-FFmpeg writes active recording segments as `.mp4.partial` files under the camera storage hierarchy. Completed non-empty segments are atomically finalized to `.mp4` and indexed in PostgreSQL. Cameras can retain recordings indefinitely or assign an expiry from a per-camera retention period; the media engine periodically removes expired, unprotected recordings from both storage and PostgreSQL.
+Read the [architecture overview](docs/architecture/overview.md) for data flows,
+network boundaries, storage invariants, and failure behavior.
 
-## Motion detection and events
+## Documentation
 
-For cameras with motion detection enabled, the Rust media engine starts a supervised motion-analysis task alongside the live publisher and recorder. The detector uses the configured motion stream (`main` or `sub`), analysis FPS, and sensitivity.
+The [Aegivue handbook](docs/README.md) is organized by task:
 
-The current first-pass detector uses FFmpeg to produce 160×90 grayscale frames, compares consecutive frames, and computes a changed-pixel ratio. When that score crosses the sensitivity-derived trigger threshold, Aegivue opens a `motion` event in PostgreSQL. While motion remains active, the event keeps the highest observed score; after roughly two seconds of quiet frames, the event is closed.
+| Guide | Use it for |
+| --- | --- |
+| [Configuration reference](docs/reference/configuration.md) | Environment variables, ports, defaults, and camera settings |
+| [RTSP camera setup](docs/cameras/rtsp.md) | Adding cameras and diagnosing stream problems |
+| [Motion and events](docs/motion/events.md) | Detector behavior, triggered recording, API, and limitations |
+| [Upgrade guide](docs/operations/upgrades.md) | Backups, images, migrations, and schema verification |
+| [Troubleshooting runbook](docs/operations/troubleshooting.md) | Symptom-first operational checks |
+| [Development setup](docs/development/getting-started.md) | Toolchains, local stack, CI checks, and integration tests |
+| [Architecture overview](docs/architecture/overview.md) | Components, data flows, trust boundaries, and resilience |
 
-Detector metadata records the analysis stream, FPS, sensitivity, detector version, and analysis resolution. Events are available through `/api/v1/events` and in the Flutter **Motion events** timeline.
+Interactive API documentation is also available at `/docs` while the API is
+running.
 
-This is a working foundation rather than the final motion system. Whole-frame scoring is currently used; motion/exclusion zones are not yet applied. Motion events are also not yet linked to recordings, and `recording.mode = motion` does not yet implement pre-event/post-event triggered capture. See [Motion detection and events](docs/motion/events.md) for the current behavior and limitations.
+## API overview
 
-## Live preview
+All application endpoints are rooted at `/api/v1`.
 
-The media engine owns camera RTSP access. Recording uses the configured main stream. Live viewing prefers the substream when available and falls back to the main stream when it is not configured.
+| Resource | Main operations |
+| --- | --- |
+| `/health` | API and database health |
+| `/cameras` | List, create, read, update, delete, start, stop, and inspect status |
+| `/recordings` | Paginate metadata, read details, update expiry, and stream media |
+| `/events` | Paginate and filter events or read an individual event |
 
-For live viewing, FFmpeg stream-copies H.264 video into MediaMTX over the private stream network. The browser performs WHEP signaling through Nginx and receives WebRTC media directly over UDP `8189`.
-
-If WebRTC negotiation fails, the frontend falls back to Low-Latency HLS at `/live/<camera-id>/index.m3u8`.
-
-The Flutter frontend now includes a dedicated **Live view** destination. Registered cameras are shown in an adaptive grid:
-
-- 1 camera: 1 column
-- 2–4 cameras: prefers 2 columns
-- 5–9 cameras: prefers 3 columns
-- 10+ cameras: prefers 4 columns
-- smaller screens automatically reduce the number of columns
-
-Selecting a tile opens that camera in a dedicated large viewer while reusing the same underlying live-player pipeline.
-
-For WebRTC to work across Docker/NAT, set `AEGIVUE_WEBRTC_HOST` to an address reachable by the browser and allow UDP `8189` to the Aegivue host.
-
-## Frontend
-
-The Flutter frontend is organized by feature:
-
-```text
-apps/web/lib/
-├── app/
-├── core/
-│   ├── api/
-│   ├── theme/
-│   └── utils/
-├── features/
-│   ├── cameras/
-│   ├── dashboard/
-│   ├── events/
-│   └── recordings/
-├── shared/
-└── main.dart
-```
-
-State flow for the main dashboard:
-
-```text
-API
- ↓
-Repositories
- ↓
-DashboardController (ChangeNotifier)
- ↓
-Provider
- ↓
-Flutter UI
-```
-
-The controller owns dashboard camera, recording, and event state and notifies listening widgets when data changes. This replaced the earlier one-shot `FutureBuilder`-driven dashboard flow and gives the frontend a cleaner base for additional live state and event-driven features.
-
-Current navigation:
-
-```text
-Overview
-Live view
-Recordings
-Motion events
-```
-
-## API
-
-The API is rooted at `/api/v1`. Interactive OpenAPI documentation is available at `/docs` while the API is running.
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `GET` | `/health` | Report API and database health |
-| `GET` / `POST` | `/cameras` | List or create cameras |
-| `GET` / `PATCH` / `DELETE` | `/cameras/:id` | Read, update, or remove a camera |
-| `POST` | `/cameras/:id/start` | Enable and start a camera worker |
-| `POST` | `/cameras/:id/stop` | Disable and stop a camera worker |
-| `GET` | `/cameras/:id/status` | Read the current worker state |
-| `GET` | `/recordings?page=1&pageSize=25` | List recordings |
-| `GET` | `/recordings/:id` | Read recording metadata |
-| `PATCH` | `/recordings/:id/expiry` | Set or clear a recording's expiry time |
-| `GET` | `/recordings/:id/media` | Stream media with HTTP byte-range support |
-| `GET` | `/events?page=1&pageSize=25` | List persisted events |
-| `GET` | `/events?kind=motion&cameraId=:cameraId` | Filter events by kind and camera |
-| `GET` | `/events/:id` | Read one event with timing, score, camera, and metadata |
-
-Storage paths and camera passwords are not returned by the API.
+Camera passwords and internal storage paths are omitted from API read models.
 
 ## Configuration
 
-The checked-in [`.env.example`](.env.example) documents deployment variables. Common options include:
+Deployment settings live in an untracked `.env` based on [`.env.example`](.env.example).
+The most commonly changed values are:
 
-| Variable | Default | Description |
+| Variable | Default | Purpose |
 | --- | --- | --- |
-| `AEGIVUE_POSTGRES_PASSWORD` | required | PostgreSQL password used by the stack |
-| `AEGIVUE_API_BIND` | `127.0.0.1` | Host address on which port `3000` is published |
-| `AEGIVUE_WEB_BIND` | `127.0.0.1` | Host address on which port `8080` is published |
-| `AEGIVUE_WEBRTC_HOST` | `127.0.0.1` | Host/IP advertised to WebRTC clients |
-| `AEGIVUE_WEBRTC_ICE_BIND` | `0.0.0.0` | Host address on which UDP `8189` is published |
-| `AEGIVUE_RECORDING_SEGMENT_SECONDS` | `60` | Recording segment length |
-| `AEGIVUE_LOG_LEVEL` | `info` | Application log verbosity |
-| `AEGIVUE_IMAGE_TAG` | `latest` | Container image tag to deploy |
-| `PUID` / `PGID` | `1000` | Runtime user and group IDs |
+| `AEGIVUE_POSTGRES_PASSWORD` | required | PostgreSQL password for the Compose stack |
+| `AEGIVUE_API_BIND` | `127.0.0.1` | Host address for API port `3000` |
+| `AEGIVUE_WEB_BIND` | `127.0.0.1` | Host address for dashboard port `8080` |
+| `AEGIVUE_WEBRTC_HOST` | `127.0.0.1` | Address advertised to WebRTC clients |
+| `AEGIVUE_WEBRTC_ICE_BIND` | `0.0.0.0` | Host address for UDP port `8189` |
+| `AEGIVUE_RECORDING_SEGMENT_SECONDS` | `60` | Recording segment duration (`5`–`3600`) |
+| `AEGIVUE_IMAGE_TAG` | `latest` | API, media, and web image tag |
 
-Database data and recordings are stored in Docker volumes by the stock Compose file. Back them up before upgrades or host maintenance.
+See the [configuration reference](docs/reference/configuration.md) before changing
+network exposure, storage mounts, proxy trust, or service-internal settings.
 
 ## Development
 
-Use the development override to build from the local source tree:
+The development stack builds all application services from the checkout:
+
+Copy the example environment file and set `AEGIVUE_POSTGRES_PASSWORD` before
+starting the stack.
 
 ```sh
 cp .env.example .env
-# Set AEGIVUE_POSTGRES_PASSWORD in .env first.
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-Run repository checks locally with Node.js 22+, a stable Rust toolchain, and
-Flutter 3.38.7:
+Run the same core checks used by CI:
 
 ```sh
 npm ci --prefix apps/api
@@ -329,7 +259,6 @@ npm --prefix apps/api run typecheck
 npm --prefix apps/api run lint
 npm --prefix apps/api run format:check
 npm --prefix apps/api test
-npm --prefix apps/api run build
 
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
@@ -340,81 +269,62 @@ flutter pub get
 dart format --output=none --set-exit-if-changed .
 flutter analyze
 flutter test
-flutter build web --release
 ```
 
-For a camera-free integration check:
-
-```sh
-docker compose -f docker-compose.yml -f docker-compose.dev.yml \
-  -f docker-compose.integration.yml up --build -d
-sh scripts/integration-rtsp.sh
-```
-
-Check the HLS fallback for an online camera through the web service:
-
-```sh
-curl --fail http://127.0.0.1:8080/live/front-door/index.m3u8
-```
-
-See [development setup](docs/development/getting-started.md) for contributor setup details.
-
-## Troubleshooting
-
-Check service health and recent logs first:
-
-```sh
-docker compose ps
-docker compose logs --tail=100 aegivue-api aegivue-media aegivue-webrtc aegivue-web
-```
-
-If the dashboard works but live video fails from another device:
-
-1. Set `AEGIVUE_WEBRTC_HOST` to a LAN IP or DNS name reachable by that browser.
-2. Allow inbound UDP `8189` through the host firewall and intervening network rules.
-3. Recreate the affected services.
-4. Test the HLS fallback at `http://<aegivue-host>:8080/live/<camera-id>/index.m3u8`.
-
-If a camera remains offline, verify its RTSP host, port, credentials, and stream path from the network where the media engine runs.
-
-If motion detection is enabled but no events appear, verify the configured motion stream is reachable, inspect `aegivue-media` logs for the detector startup/trigger messages, and check the **Motion events** view or `/api/v1/events?kind=motion`. See [Motion detection and events](docs/motion/events.md) for detector-specific troubleshooting.
-
-If logs report that a required PostgreSQL table or column does not exist, treat it as a schema-version problem rather than a camera problem. Follow [Upgrades and database migrations](docs/operations/upgrades.md) to verify the active database and migration history.
+Required toolchains are Node.js 22+, stable Rust with `rustfmt` and `clippy`, and
+Flutter 3.38.7. See [development setup](docs/development/getting-started.md) for the
+complete workflow and camera-free integration test.
 
 ## Security
 
-Aegivue currently has **no built-in authentication or authorization**. Keep it private or place it behind an authenticated reverse proxy.
+- There is currently **no built-in authentication or authorization**.
+- Keep API and dashboard bindings private or protect them with an authenticated
+  reverse proxy.
+- Give only the media engine network access to cameras in a hardened deployment.
+- Camera secrets are omitted from API responses and sanitized from structured
+  diagnostics, but encrypted secret storage is not yet implemented.
+- Never commit `.env`, camera credentials, or credential-bearing RTSP URLs.
 
-Camera passwords are omitted from API responses, and FFmpeg diagnostics sanitize RTSP URLs and credential-like values before logging. The current camera secret-storage design still needs hardening; encrypted secret storage and stronger application-level access control remain priority work.
+Please do not disclose vulnerabilities in public issues. A dedicated private
+security reporting process is planned.
 
-The media engine should be the only Aegivue component with direct access to the camera network in a hardened deployment.
+## Upgrading
 
-Please avoid disclosing security vulnerabilities in public issues. A dedicated security reporting process is still planned.
+Application images and database migrations form one release unit. Back up both
+PostgreSQL and the recording volume, update the checkout, then apply migrations
+before recreating services:
+
+```sh
+git pull
+docker compose pull
+docker compose run --rm aegivue-migrate
+docker compose up -d
+```
+
+Read the [upgrade guide](docs/operations/upgrades.md) before upgrading an existing
+installation or recovering from a schema mismatch.
 
 ## Roadmap
 
-Near-term priorities:
+Near-term priorities include:
 
-- Application authentication and authorization
-- Encrypted camera secret storage
-- Deployment hardening with versioned migration artifacts and schema-version checks
-- Motion zones and exclusion-zone scoring
-- Motion-triggered recording with pre-event and post-event capture
-- Event-to-recording linking and playback
-- Motion false-positive suppression and stronger temporal filtering
-- More complete Provider-driven camera mutations in Flutter
-- Improved recording-library UX
-- Browser-native fullscreen support for focused live cameras
-- Storage quotas, usage reporting, and protected-recording controls
-- ONVIF discovery and camera configuration
-- Optional AI detection service
-- Notifications and alert integrations
-- Broader real-camera and codec validation
+- authentication, authorization, and encrypted camera-secret storage;
+- versioned migration artifacts and stronger deployment compatibility checks;
+- motion zones, exclusion zones, and false-positive suppression;
+- storage quotas, usage reporting, and recording protection workflows;
+- ONVIF discovery and camera configuration;
+- optional AI detection and event enrichment;
+- notifications and alert integrations;
+- broader camera, codec, browser, and platform validation.
+
+Roadmap items describe intent, not a release commitment.
 
 ## Contributing
 
-Issues and pull requests are welcome. Before opening a pull request, run the API, Rust, and Flutter checks listed in [Development](#development), and keep changes scoped where practical.
+Issues and pull requests are welcome. Keep changes focused, update documentation
+with behavior or configuration changes, and run the relevant checks from
+[Development](#development) before submitting a pull request.
 
 ## License
 
-See the repository [LICENSE](LICENSE) file for the current license text.
+Aegivue is licensed under the [GNU Affero General Public License v3.0](LICENSE).
