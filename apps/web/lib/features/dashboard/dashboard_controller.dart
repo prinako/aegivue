@@ -53,11 +53,8 @@ class DashboardController extends ChangeNotifier {
   bool get loadingMoreRecordings => _loadingMoreRecordings;
   bool get hasMoreEvents => _hasMoreEvents;
   bool get loadingMoreEvents => _loadingMoreEvents;
-  DashboardData get data => DashboardData(
-    _cameraItems,
-    _recordingItems,
-    _eventItems,
-  );
+  DashboardData get data =>
+      DashboardData(_cameraItems, _recordingItems, _eventItems);
 
   Future<void> load() => _reload(showLoading: !_loaded);
 
