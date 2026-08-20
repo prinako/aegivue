@@ -119,6 +119,15 @@ impl CameraManager {
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "enabled camera not found".to_string())?;
 
+        let recording_settings = sqlx::query_as::<_, (String, i32, i32)>(
+            "SELECT mode::text, pre_event_seconds, post_event_seconds FROM recording_configs WHERE camera_id=$1",
+        )
+        .bind(id)
+        .fetch_optional(&self.database)
+        .await
+        .map_err(|error| error.to_string())?
+        .unwrap_or_else(|| ("continuous".to_string(), 5, 15));
+
         let (tx, rx) = mpsc::channel(8);
         let (status_tx, status_rx) = watch::channel(CameraState::Starting);
         let worker = CameraWorker::new(
@@ -129,6 +138,9 @@ impl CameraManager {
             status_tx,
             self.shutdown.child_token(),
             self.segment_seconds,
+            recording_settings.0,
+            recording_settings.1,
+            recording_settings.2,
         );
         let task = tokio::spawn(async move {
             worker.run().await;
