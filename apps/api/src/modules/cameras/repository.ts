@@ -48,7 +48,8 @@ const map = (r: Record<string, unknown>): CameraView => ({
     preEventSeconds: Number(r.pre_event_seconds),
     postEventSeconds: Number(r.post_event_seconds),
     retentionDays:
-      r.recording_retention_days === null || r.recording_retention_days === undefined
+      r.recording_retention_days === null ||
+      r.recording_retention_days === undefined
         ? null
         : Number(r.recording_retention_days),
   },
