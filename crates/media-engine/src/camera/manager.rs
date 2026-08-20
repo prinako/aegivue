@@ -102,9 +102,14 @@ impl CameraManager {
                 c.main_stream,
                 c.sub_stream,
                 COALESCE(rc.enabled, false) AS recording_enabled,
-                rc.retention_days
+                rc.retention_days,
+                COALESCE(mc.enabled, false) AS motion_enabled,
+                COALESCE(mc.stream::text, 'sub') AS motion_stream,
+                COALESCE(mc.analysis_fps::double precision, 5.0) AS motion_fps,
+                COALESCE(mc.sensitivity::double precision, 0.65) AS motion_sensitivity
             FROM cameras c
             LEFT JOIN recording_configs rc ON rc.camera_id = c.id
+            LEFT JOIN motion_configs mc ON mc.camera_id = c.id
             WHERE c.id = $1 AND c.enabled
             "#,
         )
