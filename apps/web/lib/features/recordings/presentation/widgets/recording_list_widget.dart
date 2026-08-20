@@ -173,6 +173,13 @@ class _RecordingCard extends StatelessWidget {
                       if (resolution != null) _MetaChip(resolution),
                       if (recording.fileSize != null)
                         _MetaChip(_fileSize(recording.fileSize!)),
+                      _MetaChip(
+                        recording.protected
+                            ? 'Protected'
+                            : recording.expiresAt == null
+                            ? 'Keep indefinitely'
+                            : 'Expires ${_expiry(recording.expiresAt!)}',
+                      ),
                     ],
                   ),
                 ],
@@ -200,6 +207,11 @@ class _RecordingCard extends StatelessWidget {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     }
     return '${(bytes / 1024).toStringAsFixed(0)} KB';
+  }
+
+  static String _expiry(DateTime value) {
+    final local = value.toLocal();
+    return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year}';
   }
 }
 

@@ -26,4 +26,14 @@ class RecordingRepository {
       totalPages: (json['totalPages'] as num?)?.toInt() ?? 1,
     );
   }
+
+  Future<Recording> setExpiry(String id, DateTime? expiresAt) async {
+    final json = await api.patchJson(
+      '${ApiEndpoints.recordings}/$id/expiry',
+      data: {
+        'expiresAt': expiresAt?.toUtc().toIso8601String(),
+      },
+    ) as Map<String, Object?>;
+    return Recording.fromJson(json);
+  }
 }
