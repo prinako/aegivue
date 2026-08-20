@@ -161,6 +161,10 @@ mod tests {
             sub_stream: sub_stream.map(str::to_owned),
             recording_enabled: false,
             retention_days: None,
+            motion_enabled: false,
+            motion_stream: "sub".into(),
+            motion_fps: 5.0,
+            motion_sensitivity: 0.65,
         }
     }
 
