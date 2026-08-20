@@ -1,5 +1,5 @@
 use super::commands::CameraCommand;
-use crate::{ffmpeg, live, recording::recorder::CameraConfig, rtsp};
+use crate::{ffmpeg, live, motion, recording::recorder::CameraConfig, rtsp};
 use aegivue_common::CameraState;
 use sqlx::PgPool;
 use std::path::PathBuf;
@@ -69,9 +69,16 @@ impl CameraWorker {
                         break;
                     }
 
-                    let live_shutdown = self.shutdown.child_token();
-                    let live_task =
-                        tokio::spawn(live::supervise(self.camera.clone(), live_shutdown.clone()));
+                    let auxiliary_shutdown = self.shutdown.child_token();
+                    let live_task = tokio::spawn(live::supervise(
+                        self.camera.clone(),
+                        auxiliary_shutdown.child_token(),
+                    ));
+                    let motion_task = tokio::spawn(motion::detector::supervise(
+                        self.camera.clone(),
+                        self.database.clone(),
+                        auxiliary_shutdown.child_token(),
+                    ));
 
                     attempt = 0;
                     let mut metadata_tick =
@@ -86,14 +93,14 @@ impl CameraWorker {
                                 Some(CameraCommand::Status(reply)) => { let _ = reply.send(*self.status.borrow()); }
                                 Some(CameraCommand::Stop) | None => {
                                     self.set_state(CameraState::Stopping);
-                                    live_shutdown.cancel();
+                                    auxiliary_shutdown.cancel();
                                     ffmpeg::terminate(&mut child, &self.camera.id, "recording").await;
                                     break true;
                                 }
                             },
                             () = self.shutdown.cancelled() => {
                                 self.set_state(CameraState::Stopping);
-                                live_shutdown.cancel();
+                                auxiliary_shutdown.cancel();
                                 ffmpeg::terminate(&mut child, &self.camera.id, "recording").await;
                                 break true;
                             }
@@ -101,8 +108,9 @@ impl CameraWorker {
                         }
                     };
 
-                    live_shutdown.cancel();
+                    auxiliary_shutdown.cancel();
                     let _ = live_task.await;
+                    let _ = motion_task.await;
                     recorder.finalize().await;
                     if should_stop {
                         break;
@@ -130,16 +138,25 @@ impl CameraWorker {
             return;
         }
 
-        let live_shutdown = self.shutdown.child_token();
-        let live_task = tokio::spawn(live::supervise(self.camera.clone(), live_shutdown.clone()));
+        let auxiliary_shutdown = self.shutdown.child_token();
+        let live_task = tokio::spawn(live::supervise(
+            self.camera.clone(),
+            auxiliary_shutdown.child_token(),
+        ));
+        let motion_task = tokio::spawn(motion::detector::supervise(
+            self.camera.clone(),
+            self.database.clone(),
+            auxiliary_shutdown.child_token(),
+        ));
 
         tracing::info!(
             camera_id=%self.camera.id,
             "recording disabled; running live preview without recorder"
         );
         if !self.set_state(CameraState::Online) {
-            live_shutdown.cancel();
+            auxiliary_shutdown.cancel();
             let _ = live_task.await;
+            let _ = motion_task.await;
             return;
         }
 
@@ -151,19 +168,20 @@ impl CameraWorker {
                     }
                     Some(CameraCommand::Stop) | None => {
                         self.set_state(CameraState::Stopping);
-                        live_shutdown.cancel();
+                        auxiliary_shutdown.cancel();
                         break;
                     }
                 },
                 () = self.shutdown.cancelled() => {
                     self.set_state(CameraState::Stopping);
-                    live_shutdown.cancel();
+                    auxiliary_shutdown.cancel();
                     break;
                 }
             }
         }
 
         let _ = live_task.await;
+        let _ = motion_task.await;
     }
 
     fn set_state(&self, next: CameraState) -> bool {
