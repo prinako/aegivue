@@ -1,8 +1,14 @@
-use super::{paths::segment_path, recorder::CameraConfig};
+use super::{paths::segment_path, prebuffer::PreEventBuffer, recorder::CameraConfig};
 use chrono::{DateTime, Local};
 use sqlx::PgPool;
-use std::{path::{Path, PathBuf}, process::Stdio};
-use tokio::{fs, process::{Child, Command}};
+use std::{
+    path::{Path, PathBuf},
+    process::Stdio,
+};
+use tokio::{
+    fs,
+    process::{Child, Command},
+};
 use uuid::Uuid;
 
 pub struct MotionEventRecorder {
@@ -13,6 +19,7 @@ pub struct MotionEventRecorder {
     event_started_at: DateTime<Local>,
     work_dir: PathBuf,
     event_partial: PathBuf,
+    pre_segments: Vec<(PathBuf, DateTime<Local>)>,
 }
 
 impl MotionEventRecorder {
@@ -22,6 +29,7 @@ impl MotionEventRecorder {
         database: PgPool,
         event_id: Uuid,
         event_started_at: DateTime<Local>,
+        prebuffer: Option<&PreEventBuffer>,
     ) -> Result<(Self, Child), String> {
         let work_dir = storage
             .join(".motion")
@@ -33,6 +41,12 @@ impl MotionEventRecorder {
         fs::create_dir_all(&work_dir)
             .await
             .map_err(|error| error.to_string())?;
+
+        let pre_dir = work_dir.join("pre");
+        let pre_segments = match prebuffer {
+            Some(buffer) => buffer.snapshot(event_started_at, &pre_dir).await?,
+            None => Vec::new(),
+        };
 
         let event_partial = work_dir.join("event.mp4.partial");
         let mut command = Command::new("ffmpeg");
@@ -80,15 +94,17 @@ impl MotionEventRecorder {
                 event_started_at,
                 work_dir,
                 event_partial,
+                pre_segments,
             },
             child,
         ))
     }
 
-    pub async fn finalize(
-        self,
-        pre_segments: Vec<(PathBuf, DateTime<Local>)>,
-    ) -> Result<PathBuf, String> {
+    pub fn pre_event_segment_count(&self) -> usize {
+        self.pre_segments.len()
+    }
+
+    pub async fn finalize(self) -> Result<PathBuf, String> {
         let event_clip = self.work_dir.join("event.mp4");
         if fs::try_exists(&self.event_partial).await.unwrap_or(false) {
             fs::rename(&self.event_partial, &event_clip)
@@ -96,39 +112,61 @@ impl MotionEventRecorder {
                 .map_err(|error| error.to_string())?;
         }
         if !fs::try_exists(&event_clip).await.unwrap_or(false) {
-            return Err("motion event recorder did not produce a playable file".to_string());
+            return Err("motion event recorder did not produce a file".to_string());
+        }
+        if probe_duration_ms(&event_clip).await.is_none() {
+            return Err("motion event recorder did not produce a playable MP4".to_string());
         }
 
-        let start = pre_segments
+        let requested_start = self
+            .pre_segments
             .first()
             .map(|(_, start)| *start)
             .unwrap_or(self.event_started_at);
-        let target = segment_path(&self.storage, &self.camera.id, start)
+        let requested_target = segment_path(&self.storage, &self.camera.id, requested_start)
             .map_err(|error| error.to_string())?;
-        if let Some(parent) = target.parent() {
+        if let Some(parent) = requested_target.parent() {
             fs::create_dir_all(parent)
                 .await
                 .map_err(|error| error.to_string())?;
         }
 
-        let mut inputs: Vec<PathBuf> = pre_segments.iter().map(|(path, _)| path.clone()).collect();
+        let mut inputs: Vec<PathBuf> = self
+            .pre_segments
+            .iter()
+            .map(|(path, _)| path.clone())
+            .collect();
         inputs.push(event_clip.clone());
 
-        if inputs.len() == 1 {
-            fs::rename(&event_clip, &target)
-                .await
-                .map_err(|error| error.to_string())?;
-        } else if let Err(error) = concat_mp4s(&inputs, &target, &self.work_dir).await {
-            tracing::warn!(
-                camera_id=%self.camera.id,
-                event_id=%self.event_id,
-                %error,
-                "pre-event concat failed; preserving event recording without prebuffer"
-            );
-            fs::rename(&event_clip, &target)
-                .await
-                .map_err(|rename_error| rename_error.to_string())?;
-        }
+        let (target, start, used_prebuffer) = if inputs.len() == 1 {
+            move_event_clip(&event_clip, &requested_target).await?;
+            (requested_target, self.event_started_at, false)
+        } else {
+            match concat_mp4s(&inputs, &requested_target, &self.work_dir).await {
+                Ok(()) => (requested_target, requested_start, true),
+                Err(error) => {
+                    tracing::warn!(
+                        camera_id=%self.camera.id,
+                        event_id=%self.event_id,
+                        %error,
+                        "pre-event concat failed; preserving the event recording without prebuffer"
+                    );
+                    let fallback = segment_path(
+                        &self.storage,
+                        &self.camera.id,
+                        self.event_started_at,
+                    )
+                    .map_err(|path_error| path_error.to_string())?;
+                    if let Some(parent) = fallback.parent() {
+                        fs::create_dir_all(parent)
+                            .await
+                            .map_err(|mkdir_error| mkdir_error.to_string())?;
+                    }
+                    move_event_clip(&event_clip, &fallback).await?;
+                    (fallback, self.event_started_at, false)
+                }
+            }
+        };
 
         let duration_ms = probe_duration_ms(&target)
             .await
@@ -163,33 +201,59 @@ impl MotionEventRecorder {
         .await
         .map_err(|error| error.to_string())?;
 
+        let pre_event_segments = self.pre_segments.len();
         let _ = fs::remove_dir_all(&self.work_dir).await;
         tracing::info!(
             camera_id=%self.camera.id,
             event_id=%self.event_id,
             path=%target.display(),
             duration_ms,
-            pre_event_segments=pre_segments.len(),
+            pre_event_segments,
+            used_prebuffer,
             "motion event finalized as a single recording"
         );
         Ok(target)
     }
 }
 
+async fn move_event_clip(source: &Path, target: &Path) -> Result<(), String> {
+    if fs::try_exists(target).await.unwrap_or(false) {
+        fs::remove_file(target)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+    fs::rename(source, target)
+        .await
+        .map_err(|error| error.to_string())
+}
+
 async fn concat_mp4s(inputs: &[PathBuf], target: &Path, work_dir: &Path) -> Result<(), String> {
     let list_path = work_dir.join("concat.txt");
     let mut list = String::new();
     for path in inputs {
-        let escaped = path.to_string_lossy().replace('\\', "\\\\").replace('\'', "'\\''");
-        list.push_str(&format!("file '{}\n", escaped));
+        let escaped = path
+            .to_string_lossy()
+            .replace('\\', "\\\\")
+            .replace('\'', "'\\''");
+        list.push_str(&format!("file '{escaped}'\n"));
     }
     fs::write(&list_path, list)
         .await
         .map_err(|error| error.to_string())?;
 
     let temp_target = target.with_extension("mp4.partial");
+    let _ = fs::remove_file(&temp_target).await;
     let output = Command::new("ffmpeg")
-        .args(["-hide_banner", "-loglevel", "warning", "-f", "concat", "-safe", "0", "-i"])
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "warning",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+        ])
         .arg(&list_path)
         .args(["-c", "copy", "-movflags", "+faststart", "-f", "mp4"])
         .arg(&temp_target)
@@ -202,6 +266,11 @@ async fn concat_mp4s(inputs: &[PathBuf], target: &Path, work_dir: &Path) -> Resu
     if !output.status.success() {
         let _ = fs::remove_file(&temp_target).await;
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    if fs::try_exists(target).await.unwrap_or(false) {
+        fs::remove_file(target)
+            .await
+            .map_err(|error| error.to_string())?;
     }
     fs::rename(&temp_target, target)
         .await
