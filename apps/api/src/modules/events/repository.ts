@@ -58,14 +58,14 @@ export class EventRepository {
   }
 
   async count(kind?: EventKind, cameraId?: string): Promise<number> {
-    const { rows } = await this.db.query(
+    const { rows } = await this.db.query<{ count: number }>(
       `SELECT count(*)::int AS count
        FROM events
        WHERE ($1::event_kind IS NULL OR kind = $1)
          AND ($2::varchar IS NULL OR camera_id = $2)`,
       [kind ?? null, cameraId ?? null],
     );
-    return Number(rows[0]?.count ?? 0);
+    return rows[0]?.count ?? 0;
   }
 
   async find(id: string): Promise<EventView | null> {
