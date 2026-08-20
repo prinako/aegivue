@@ -1,13 +1,16 @@
 use super::commands::CameraCommand;
 use crate::{
     ffmpeg, live, motion,
-    recording::recorder::{CameraConfig, Recorder},
+    recording::{
+        prebuffer::{self, PreEventBuffer},
+        recorder::{CameraConfig, Recorder},
+    },
     rtsp,
 };
 use aegivue_common::CameraState;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use sqlx::PgPool;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 use tokio::{
     process::Child,
     sync::{mpsc, watch},
@@ -180,21 +183,59 @@ impl CameraWorker {
             auxiliary_shutdown.child_token(),
         ));
 
-        if self.pre_event_seconds > 0 {
-            tracing::info!(
-                camera_id=%self.camera.id,
-                pre_event_seconds=self.pre_event_seconds,
-                "motion recording pre-event buffering is not implemented yet; recording begins at the motion trigger"
-            );
-        }
+        let mut prebuffer_child: Option<Child> = None;
+        let mut prebuffer_task = None;
+        let prebuffer = if self.pre_event_seconds > 0 {
+            match PreEventBuffer::start(&self.camera, &self.storage, self.pre_event_seconds).await {
+                Ok((buffer, mut child)) => {
+                    ffmpeg::log_stderr(
+                        &mut child,
+                        &self.camera.id,
+                        "pre-event-buffer",
+                        self.camera.username.as_deref(),
+                        self.camera.password_secret.as_deref(),
+                    );
+                    let buffer = Arc::new(buffer);
+                    prebuffer_task = Some(tokio::spawn(prebuffer::supervise_pruning(
+                        buffer.clone(),
+                        auxiliary_shutdown.child_token(),
+                    )));
+                    prebuffer_child = Some(child);
+                    tracing::info!(
+                        camera_id=%self.camera.id,
+                        pre_event_seconds=self.pre_event_seconds,
+                        "pre-event recording buffer started"
+                    );
+                    Some(buffer)
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        camera_id=%self.camera.id,
+                        %error,
+                        "unable to start pre-event recording buffer; motion recording will start at trigger"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         tracing::info!(
             camera_id=%self.camera.id,
+            pre_event_seconds=self.pre_event_seconds,
             post_event_seconds=self.post_event_seconds,
-            "motion recording mode active; continuous recorder is idle until motion is detected"
+            "motion recording mode active; event recorder is idle until motion is detected"
         );
 
         if !self.set_state(CameraState::Online) {
             auxiliary_shutdown.cancel();
+            if let Some(mut child) = prebuffer_child.take() {
+                ffmpeg::terminate(&mut child, &self.camera.id, "pre-event-buffer").await;
+            }
+            if let Some(task) = prebuffer_task.take() {
+                let _ = task.await;
+            }
             let _ = live_task.await;
             let _ = motion_task.await;
             return;
@@ -245,7 +286,33 @@ impl CameraWorker {
                     };
 
                     match (session.is_some(), desired_event) {
-                        (false, Some(event_id)) => {
+                        (false, Some((event_id, event_started_at))) => {
+                            if let Some(buffer) = prebuffer.as_ref() {
+                                match buffer
+                                    .promote(
+                                        &self.camera,
+                                        &self.storage,
+                                        &self.database,
+                                        event_id,
+                                        event_started_at.with_timezone(&Local),
+                                    )
+                                    .await
+                                {
+                                    Ok(count) => tracing::info!(
+                                        camera_id=%self.camera.id,
+                                        event_id=%event_id,
+                                        promoted_segments=count,
+                                        pre_event_seconds=self.pre_event_seconds,
+                                        "pre-event recording buffer promoted"
+                                    ),
+                                    Err(error) => tracing::warn!(
+                                        camera_id=%self.camera.id,
+                                        event_id=%event_id,
+                                        %error,
+                                        "unable to promote pre-event recording buffer"
+                                    ),
+                                }
+                            }
                             match self.start_motion_session(event_id).await {
                                 Ok(started) => session = Some(started),
                                 Err(error) => tracing::warn!(camera_id=%self.camera.id, event_id=%event_id, %error, "unable to start motion-triggered recorder"),
@@ -265,13 +332,19 @@ impl CameraWorker {
             self.finish_motion_session(active).await;
         }
         auxiliary_shutdown.cancel();
+        if let Some(mut child) = prebuffer_child.take() {
+            ffmpeg::terminate(&mut child, &self.camera.id, "pre-event-buffer").await;
+        }
+        if let Some(task) = prebuffer_task.take() {
+            let _ = task.await;
+        }
         let _ = live_task.await;
         let _ = motion_task.await;
     }
 
-    async fn current_motion_event(&self) -> Result<Option<Uuid>, sqlx::Error> {
-        sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM events WHERE camera_id=$1 AND kind='motion' AND (ended_at IS NULL OR ended_at + ($2 * INTERVAL '1 second') > now()) ORDER BY started_at DESC LIMIT 1",
+    async fn current_motion_event(&self) -> Result<Option<(Uuid, DateTime<Utc>)>, sqlx::Error> {
+        sqlx::query_as::<_, (Uuid, DateTime<Utc>)>(
+            "SELECT id, started_at FROM events WHERE camera_id=$1 AND kind='motion' AND (ended_at IS NULL OR ended_at + ($2 * INTERVAL '1 second') > now()) ORDER BY started_at DESC LIMIT 1",
         )
         .bind(&self.camera.id)
         .bind(self.post_event_seconds)
