@@ -110,7 +110,11 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
     return null;
   }
 
-  String? _optionalInteger(String? value, {required int min, required int max}) {
+  String? _optionalInteger(
+    String? value, {
+    required int min,
+    required int max,
+  }) {
     if (value == null || value.trim().isEmpty) return null;
     return _integer(value, min: min, max: max);
   }
@@ -162,8 +166,9 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
         recordingMode: _recordingMode,
         preEventSeconds: int.parse(_preEvent.text),
         postEventSeconds: int.parse(_postEvent.text),
-        recordingRetentionDays:
-            retentionText.isEmpty ? null : int.parse(retentionText),
+        recordingRetentionDays: retentionText.isEmpty
+            ? null
+            : int.parse(retentionText),
         motionEnabled: _motionEnabled,
         motionStream: _motionStream,
         motionFps: double.parse(_motionFps.text),
@@ -369,8 +374,7 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
                   'Leave blank to keep new recordings indefinitely. This default applies to newly finalized recordings; individual recording expiry can still be changed in the Recordings tab.',
               prefixIcon: Icon(Icons.auto_delete_outlined),
             ),
-            validator: (value) =>
-                _optionalInteger(value, min: 1, max: 3650),
+            validator: (value) => _optionalInteger(value, min: 1, max: 3650),
           ),
           const SizedBox(height: 24),
           _sectionTitle(context, 'Motion'),
