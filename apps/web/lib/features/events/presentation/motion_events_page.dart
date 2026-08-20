@@ -54,7 +54,11 @@ class _MotionEventsPageState extends State<MotionEventsPage> {
           physics: const AlwaysScrollableScrollPhysics(),
           children: const [
             SizedBox(height: 160),
-            Icon(Icons.motion_photos_off_outlined, size: 48, color: Colors.white38),
+            Icon(
+              Icons.motion_photos_off_outlined,
+              size: 48,
+              color: Colors.white38,
+            ),
             SizedBox(height: 12),
             Center(
               child: Text(
@@ -112,7 +116,9 @@ class _MotionEventCard extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -130,9 +136,8 @@ class _MotionEventCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           event.cameraName,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                       ),
                       _StatusChip(active: event.active),
@@ -149,9 +154,13 @@ class _MotionEventCard extends StatelessWidget {
                     runSpacing: 8,
                     children: [
                       if (score != null)
-                        _MetaChip(label: 'Score ${(score * 100).toStringAsFixed(1)}%'),
+                        _MetaChip(
+                          label: 'Score ${(score * 100).toStringAsFixed(1)}%',
+                        ),
                       if (event.duration != null)
-                        _MetaChip(label: 'Duration ${_formatDuration(event.duration!)}'),
+                        _MetaChip(
+                          label: 'Duration ${_formatDuration(event.duration!)}',
+                        ),
                       if (stream != null) _MetaChip(label: 'Stream $stream'),
                       if (fps != null) _MetaChip(label: '$fps fps'),
                       if (sensitivity != null)
@@ -189,7 +198,9 @@ class _StatusChip extends StatelessWidget {
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: active ? Theme.of(context).colorScheme.primary : Colors.white60,
+          color: active
+              ? Theme.of(context).colorScheme.primary
+              : Colors.white60,
         ),
       ),
     );
@@ -209,7 +220,10 @@ class _MetaChip extends StatelessWidget {
         color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(label, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 11, color: Colors.white70),
+      ),
     );
   }
 }
