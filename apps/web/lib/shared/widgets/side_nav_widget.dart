@@ -51,6 +51,12 @@ class SideNavWidget extends StatelessWidget {
             selected: section == 2,
             onTap: () => onSelect(2),
           ),
+          NavButtonWidget(
+            icon: Icons.motion_photos_on_outlined,
+            label: 'Motion events',
+            selected: section == 3,
+            onTap: () => onSelect(3),
+          ),
           const Spacer(),
           const Padding(
             padding: EdgeInsets.all(20),
