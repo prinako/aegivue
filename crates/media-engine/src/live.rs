@@ -161,6 +161,7 @@ mod tests {
             password_secret: None,
             main_stream: "/main".into(),
             sub_stream: sub_stream.map(str::to_owned),
+            recording_enabled: false,
         }
     }
 
