@@ -180,8 +180,12 @@
 //   });
 // };
 
-
-import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
+import type {
+  FastifyInstance,
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyRequest,
+} from "fastify";
 import { createCamera, cameraId, updateCamera } from "./schemas.js";
 import { CameraRepository } from "./repository.js";
 import { MediaClientError } from "../../clients/media-client.js";
@@ -203,23 +207,35 @@ function mediaFailure(reply: FastifyReply, error: unknown) {
   });
 }
 
-async function safeStartMedia(app: FastifyInstance, request: FastifyRequest, camera: { id: string; enabled: boolean }) {
+async function safeStartMedia(
+  app: FastifyInstance,
+  request: FastifyRequest,
+  camera: { id: string; enabled: boolean },
+) {
   if (!camera.enabled) return;
   try {
     await app.media.start(camera);
   } catch (error) {
-    request.log.warn({ err: error, camera_id: camera.id }, "Media start deferred or unavailable");
+    request.log.warn(
+      { err: error, camera_id: camera.id },
+      "Media start deferred or unavailable",
+    );
   }
 }
 
-async function safeStopMedia(app: FastifyInstance, request: FastifyRequest, id: string, contextOp: string) {
+async function safeStopMedia(
+  app: FastifyInstance,
+  request: FastifyRequest,
+  id: string,
+  contextOp: string,
+) {
   try {
     await app.media.stop(id);
   } catch (error) {
     if (!(error instanceof MediaClientError && error.kind === "not_found")) {
       request.log.warn(
         { camera_id: id, operation: contextOp, status: "deferred" },
-        "Camera media worker could not be stopped"
+        "Camera media worker could not be stopped",
       );
     }
   }
@@ -229,14 +245,14 @@ async function handleMediaAction(
   request: FastifyRequest<{ Params: { id: string } }>,
   reply: FastifyReply,
   action: () => Promise<unknown>,
-  operation: string
+  operation: string,
 ) {
   try {
     return await action();
   } catch (error) {
     request.log.warn(
       { camera_id: request.params.id, operation, status: "failed" },
-      "Media operation failed"
+      "Media operation failed",
     );
     return mediaFailure(reply, error);
   }
@@ -267,7 +283,9 @@ async function removeCameraOrDisable(
   try {
     const removed = await repo.remove(id);
     if (!removed) {
-      return await reply.code(404).send({ code: "NOT_FOUND", message: "Camera not found" });
+      return await reply
+        .code(404)
+        .send({ code: "NOT_FOUND", message: "Camera not found" });
     }
     return await reply.code(204).send();
   } catch (error) {
@@ -292,12 +310,16 @@ export const cameraRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { id: string } }>("/:id", async (request, reply) => {
     const parsed = cameraId.safeParse(request.params.id);
     if (!parsed.success) {
-      return reply.code(400).send({ code: "VALIDATION_ERROR", message: "Invalid camera id" });
+      return reply
+        .code(400)
+        .send({ code: "VALIDATION_ERROR", message: "Invalid camera id" });
     }
 
     const camera = await repo.find(parsed.data);
     if (!camera) {
-      return reply.code(404).send({ code: "NOT_FOUND", message: "Camera not found" });
+      return reply
+        .code(404)
+        .send({ code: "NOT_FOUND", message: "Camera not found" });
     }
 
     return camera;
@@ -319,22 +341,39 @@ export const cameraRoutes: FastifyPluginAsync = async (app) => {
       return await reply.code(201).send(camera);
     } catch (error) {
       if ((error as { code?: string }).code === "23505") {
-        return reply.code(409).send({ code: "CAMERA_EXISTS", message: "Camera id already exists" });
+        return reply
+          .code(409)
+          .send({ code: "CAMERA_EXISTS", message: "Camera id already exists" });
       }
       throw error;
     }
   });
 
   app.post<{ Params: { id: string } }>("/:id/start", async (request, reply) =>
-    handleMediaAction(request, reply, () => app.media.start({ id: request.params.id }), "start")
+    handleMediaAction(
+      request,
+      reply,
+      () => app.media.start({ id: request.params.id }),
+      "start",
+    ),
   );
 
   app.post<{ Params: { id: string } }>("/:id/stop", async (request, reply) =>
-    handleMediaAction(request, reply, () => app.media.stop(request.params.id), "stop")
+    handleMediaAction(
+      request,
+      reply,
+      () => app.media.stop(request.params.id),
+      "stop",
+    ),
   );
 
   app.get<{ Params: { id: string } }>("/:id/status", async (request, reply) =>
-    handleMediaAction(request, reply, () => app.media.status(request.params.id), "status")
+    handleMediaAction(
+      request,
+      reply,
+      () => app.media.status(request.params.id),
+      "status",
+    ),
   );
 
   app.patch<{ Params: { id: string } }>("/:id", async (request, reply) => {
@@ -350,12 +389,16 @@ export const cameraRoutes: FastifyPluginAsync = async (app) => {
     const { id } = request.params;
     const previous = await repo.find(id);
     if (!previous) {
-      return reply.code(404).send({ code: "NOT_FOUND", message: "Camera not found" });
+      return reply
+        .code(404)
+        .send({ code: "NOT_FOUND", message: "Camera not found" });
     }
 
     const camera = await repo.update(id, parsed.data);
     if (!camera) {
-      return reply.code(404).send({ code: "NOT_FOUND", message: "Camera not found" });
+      return reply
+        .code(404)
+        .send({ code: "NOT_FOUND", message: "Camera not found" });
     }
 
     await safeStopMedia(app, request, id, "stop-before-update");
