@@ -20,7 +20,8 @@ const map = (row: Record<string, unknown>): EventView => ({
   kind: row.kind as EventKind,
   startedAt: new Date(row.started_at as string).toISOString(),
   endedAt: row.ended_at ? new Date(row.ended_at as string).toISOString() : null,
-  score: row.score === null || row.score === undefined ? null : Number(row.score),
+  score:
+    row.score === null || row.score === undefined ? null : Number(row.score),
   metadata:
     row.metadata && typeof row.metadata === "object"
       ? (row.metadata as Record<string, unknown>)

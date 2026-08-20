@@ -6,7 +6,10 @@ const pagination = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
   kind: z.enum(["motion", "object", "manual", "system"]).optional(),
-  cameraId: z.string().regex(/^[a-z0-9][a-z0-9_-]{2,63}$/).optional(),
+  cameraId: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9_-]{2,63}$/)
+    .optional(),
 });
 const eventId = z.string().uuid();
 
