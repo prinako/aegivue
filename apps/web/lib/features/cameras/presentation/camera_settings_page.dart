@@ -25,6 +25,7 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
   late final TextEditingController _subStream;
   late final TextEditingController _preEvent;
   late final TextEditingController _postEvent;
+  late final TextEditingController _retentionDays;
   late final TextEditingController _motionFps;
 
   bool _enabled = true;
@@ -60,6 +61,9 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
     _postEvent = TextEditingController(
       text: '${camera?.recording.postEventSeconds ?? 15}',
     );
+    _retentionDays = TextEditingController(
+      text: camera?.recording.retentionDays?.toString() ?? '',
+    );
     _motionFps = TextEditingController(text: '${camera?.motion.fps ?? 5}');
     _enabled = camera?.enabled ?? true;
     _recordingEnabled = camera?.recording.enabled ?? true;
@@ -82,6 +86,7 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
       _subStream,
       _preEvent,
       _postEvent,
+      _retentionDays,
       _motionFps,
     ]) {
       controller.dispose();
@@ -103,6 +108,11 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
     if (parsed == null) return 'Enter a number';
     if (parsed < min || parsed > max) return 'Use a value from $min to $max';
     return null;
+  }
+
+  String? _optionalInteger(String? value, {required int min, required int max}) {
+    if (value == null || value.trim().isEmpty) return null;
+    return _integer(value, min: min, max: max);
   }
 
   String? _fps(String? value) {
@@ -135,6 +145,7 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
 
     setState(() => _saving = true);
     try {
+      final retentionText = _retentionDays.text.trim();
       final configuration = CameraConfiguration(
         id: _id.text.trim(),
         name: _name.text.trim(),
@@ -151,6 +162,8 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
         recordingMode: _recordingMode,
         preEventSeconds: int.parse(_preEvent.text),
         postEventSeconds: int.parse(_postEvent.text),
+        recordingRetentionDays:
+            retentionText.isEmpty ? null : int.parse(retentionText),
         motionEnabled: _motionEnabled,
         motionStream: _motionStream,
         motionFps: double.parse(_motionFps.text),
@@ -344,13 +357,28 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
               validator: (value) => _integer(value, min: 0, max: 600),
             ),
           ]),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _retentionDays,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Default retention days',
+              hintText: '30',
+              border: OutlineInputBorder(),
+              helperText:
+                  'Leave blank to keep new recordings indefinitely. This default applies to newly finalized recordings; individual recording expiry can still be changed in the Recordings tab.',
+              prefixIcon: Icon(Icons.auto_delete_outlined),
+            ),
+            validator: (value) =>
+                _optionalInteger(value, min: 1, max: 3650),
+          ),
           const SizedBox(height: 24),
           _sectionTitle(context, 'Motion'),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Motion detection'),
             subtitle: const Text(
-              'Configuration is saved now; detection is a later Vigilo phase.',
+              'Configuration is saved now; detection is a later Aegivue phase.',
             ),
             value: _motionEnabled,
             onChanged: (value) => setState(() => _motionEnabled = value),
