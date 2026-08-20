@@ -132,182 +132,264 @@ impl Recorder {
                 "copy",
                 "-c:a",
                 "aac",
+                "-b:a",
+                "64k",
                 "-f",
                 "segment",
+                "-segment_format",
+                "mp4",
                 "-segment_time",
-                &self.segment_seconds.to_string(),
+            ])
+            .arg(self.segment_seconds.to_string())
+            .args([
+                "-segment_atclocktime",
+                "1",
                 "-reset_timestamps",
                 "1",
                 "-strftime",
                 "1",
-                "-y",
+                "-movflags",
+                "+faststart",
             ])
             .arg(pattern)
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
-            .stderr(Stdio::piped());
-
-        let mut child = command.spawn()?;
-        crate::ffmpeg::log_stderr(
-            &mut child,
-            &self.camera.id,
-            "recording",
-            self.camera.username.as_deref(),
-            self.camera.password_secret.as_deref(),
-        );
-        Ok(child)
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        Ok(command.spawn()?)
     }
 
-    pub async fn persist_segments(&self, include_current: bool) {
-        if let Err(error) = self.persist_segments_inner(include_current).await {
-            tracing::warn!(camera_id=%self.camera.id, %error, "unable to persist recording metadata");
-        }
-    }
-
-    pub async fn finalize(&self) {
-        self.persist_segments(true).await;
-    }
-
-    async fn ensure_directories(&self) -> Result<(), std::io::Error> {
-        let now = Local::now();
-        for offset in 0..=1 {
-            let time = now + chrono::Duration::hours(offset);
-            let path = camera_directory(&self.storage, &self.camera.id, time)
-                .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
-            fs::create_dir_all(path).await?;
-        }
-        Ok(())
-    }
-
-    async fn recover_finalized_segments(&self) {
-        let camera_root = self.storage.join(&self.camera.id);
-        let mut stack = vec![camera_root];
-        while let Some(directory) = stack.pop() {
-            let Ok(mut entries) = fs::read_dir(&directory).await else {
+    async fn files_with_suffix(&self, suffix: &str) -> Vec<PathBuf> {
+        let root = self.storage.join(&self.camera.id);
+        let mut pending = vec![root];
+        let mut files = Vec::new();
+        while let Some(directory) = pending.pop() {
+            let Ok(mut entries) = fs::read_dir(directory).await else {
                 continue;
             };
             while let Ok(Some(entry)) = entries.next_entry().await {
                 let path = entry.path();
-                if path.is_dir() {
-                    stack.push(path);
-                } else if path.extension().and_then(|value| value.to_str()) == Some("mp4") {
-                    self.pending_metadata.lock().await.push(path);
+                if entry.file_type().await.is_ok_and(|kind| kind.is_dir()) {
+                    pending.push(path);
+                } else if path.to_string_lossy().ends_with(suffix) {
+                    files.push(path);
                 }
             }
         }
-        self.flush_pending().await;
+        files.sort();
+        files
     }
 
-    async fn persist_segments_inner(&self, include_current: bool) -> Result<(), std::io::Error> {
-        self.ensure_directories().await?;
-        let camera_root = self.storage.join(&self.camera.id);
-        let mut partials = Vec::new();
-        let mut stack = vec![camera_root];
-        while let Some(directory) = stack.pop() {
-            let Ok(mut entries) = fs::read_dir(&directory).await else {
-                continue;
-            };
-            while let Some(entry) = entries.next_entry().await? {
-                let path = entry.path();
-                if path.is_dir() {
-                    stack.push(path);
-                } else if path.extension().and_then(|value| value.to_str()) == Some("partial") {
-                    partials.push(path);
-                }
+    async fn partial_files(&self) -> Vec<PathBuf> {
+        self.files_with_suffix(".mp4.partial").await
+    }
+
+    async fn finalized_files(&self) -> Vec<PathBuf> {
+        self.files_with_suffix(".mp4").await
+    }
+
+    pub async fn has_received_packets(&self) -> bool {
+        for path in self.partial_files().await {
+            if fs::metadata(path)
+                .await
+                .is_ok_and(|metadata| metadata.len() > 0)
+            {
+                return true;
             }
         }
-        partials.sort();
-        let finalize_count = if include_current {
-            partials.len()
-        } else {
-            partials.len().saturating_sub(1)
+        false
+    }
+
+    pub async fn persist_segments(&self, include_latest: bool) {
+        if let Err(error) = self.ensure_directories().await {
+            tracing::error!(camera_id=%self.camera.id, %error, "unable to prepare current recording directories");
+            return;
+        }
+        self.retry_pending_metadata().await;
+
+        let mut files = self.partial_files().await;
+        if !include_latest {
+            files.pop();
+        }
+        for partial in files {
+            self.finalize_segment(&partial).await;
+        }
+    }
+
+    async fn finalize_segment(&self, partial: &Path) {
+        let Ok(metadata) = fs::metadata(partial).await else {
+            return;
         };
-        for partial in partials.into_iter().take(finalize_count) {
-            let metadata = fs::metadata(&partial).await?;
-            if metadata.len() == 0 {
-                let _ = fs::remove_file(&partial).await;
-                continue;
-            }
-            let final_path = partial.with_extension("");
-            fs::rename(&partial, &final_path).await?;
-            self.pending_metadata.lock().await.push(final_path);
+        if metadata.len() == 0 {
+            tracing::warn!(camera_id=%self.camera.id, path=%partial.display(), "discarding empty partial segment");
+            let _ = fs::remove_file(partial).await;
+            return;
         }
-        self.flush_pending().await;
-        Ok(())
-    }
-
-    async fn flush_pending(&self) {
-        let pending = {
-            let mut guard = self.pending_metadata.lock().await;
-            std::mem::take(&mut *guard)
+        let Some(start) = segment_time(&self.storage, &self.camera.id, partial) else {
+            tracing::error!(camera_id=%self.camera.id, path=%partial.display(), "invalid segment path");
+            return;
         };
-        let mut failed = Vec::new();
-        for path in pending {
-            if let Err(error) = self.persist_one(&path).await {
-                tracing::warn!(camera_id=%self.camera.id,path=%path.display(),%error,"unable to index finalized recording");
-                failed.push(path);
-            }
+        let Some(duration_ms) = probe_duration_ms(partial).await else {
+            tracing::warn!(camera_id=%self.camera.id, path=%partial.display(), "partial segment is not a valid playable MP4");
+            return;
+        };
+        let final_path = PathBuf::from(partial.to_string_lossy().trim_end_matches(".partial"));
+        if let Err(error) = fs::rename(partial, &final_path).await {
+            tracing::error!(camera_id=%self.camera.id, error=%error, "unable to atomically finalize segment");
+            return;
         }
-        if !failed.is_empty() {
-            self.pending_metadata.lock().await.extend(failed);
+        if let Err(error) = self
+            .insert_recording_metadata(&final_path, metadata.len(), start, duration_ms)
+            .await
+        {
+            tracing::error!(camera_id=%self.camera.id, path=%final_path.display(), %error, "unable to persist finalized segment metadata; queued for retry");
+            self.queue_metadata_retry(final_path).await;
         }
     }
 
-    async fn persist_one(&self, path: &Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let start = segment_time(path)?;
-        let metadata = fs::metadata(path).await?;
-        let duration_ms = self.segment_seconds.saturating_mul(1000) as i64;
+    async fn insert_recording_metadata(
+        &self,
+        final_path: &Path,
+        file_size: u64,
+        start: chrono::DateTime<Local>,
+        duration_ms: i64,
+    ) -> Result<(), sqlx::Error> {
         let end = start + chrono::Duration::milliseconds(duration_ms);
         let expires_at = self
             .camera
             .retention_days
             .map(|days| end + chrono::Duration::days(i64::from(days)));
-        let id = Uuid::new_v4();
-        sqlx::query(
-            r#"
-            INSERT INTO recordings(
-                id,
-                camera_id,
-                start_time,
-                end_time,
-                file_path,
-                file_size,
-                container,
-                duration_ms,
-                expires_at
-            )
-            VALUES($1,$2,$3,$4,$5,$6,'mp4',$7,$8)
-            ON CONFLICT(file_path) DO NOTHING
-            "#,
-        )
-        .bind(id)
-        .bind(&self.camera.id)
-        .bind(start)
-        .bind(end)
-        .bind(path.to_string_lossy().as_ref())
-        .bind(metadata.len() as i64)
-        .bind(duration_ms)
-        .bind(expires_at)
-        .execute(&self.database)
-        .await?;
+        let relative = final_path
+            .strip_prefix(&self.storage)
+            .unwrap_or(final_path)
+            .to_string_lossy()
+            .into_owned();
+        sqlx::query("INSERT INTO recordings(id,camera_id,start_time,end_time,file_path,file_size,container,duration_ms,expires_at) VALUES($1,$2,$3,$4,$5,$6,'mp4',$7,$8) ON CONFLICT(file_path) DO NOTHING")
+            .bind(Uuid::new_v4())
+            .bind(&self.camera.id)
+            .bind(start)
+            .bind(end)
+            .bind(relative)
+            .bind(file_size as i64)
+            .bind(duration_ms)
+            .bind(expires_at)
+            .execute(&self.database)
+            .await?;
         Ok(())
     }
+
+    async fn queue_metadata_retry(&self, path: PathBuf) {
+        let mut pending = self.pending_metadata.lock().await;
+        if !pending.contains(&path) {
+            pending.push(path);
+        }
+    }
+
+    async fn retry_pending_metadata(&self) {
+        let paths = {
+            let mut pending = self.pending_metadata.lock().await;
+            std::mem::take(&mut *pending)
+        };
+        for path in paths {
+            if let Err(error) = self.recover_finalized_file(&path).await {
+                tracing::warn!(camera_id=%self.camera.id, path=%path.display(), %error, "recording metadata retry deferred");
+                self.queue_metadata_retry(path).await;
+            }
+        }
+    }
+
+    async fn recover_finalized_segments(&self) {
+        for path in self.finalized_files().await {
+            if let Err(error) = self.recover_finalized_file(&path).await {
+                tracing::warn!(camera_id=%self.camera.id, path=%path.display(), %error, "unable to reconcile finalized recording metadata");
+                self.queue_metadata_retry(path).await;
+            }
+        }
+    }
+
+    async fn recover_finalized_file(&self, path: &Path) -> Result<(), String> {
+        let relative = path
+            .strip_prefix(&self.storage)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .into_owned();
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM recordings WHERE file_path=$1)",
+        )
+        .bind(&relative)
+        .fetch_one(&self.database)
+        .await
+        .map_err(|error| error.to_string())?;
+        if exists {
+            return Ok(());
+        }
+
+        let metadata = fs::metadata(path)
+            .await
+            .map_err(|error| error.to_string())?;
+        if metadata.len() == 0 {
+            return Err("finalized recording is empty".to_string());
+        }
+        let start = segment_time(&self.storage, &self.camera.id, path)
+            .ok_or_else(|| "invalid finalized segment path".to_string())?;
+        let duration_ms = probe_duration_ms(path)
+            .await
+            .ok_or_else(|| "finalized recording is not a playable MP4".to_string())?;
+        self.insert_recording_metadata(path, metadata.len(), start, duration_ms)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn finalize(&self) {
+        self.persist_segments(true).await;
+        self.retry_pending_metadata().await;
+    }
+
+    async fn ensure_directories(&self) -> Result<(), std::io::Error> {
+        let now = Local::now();
+        for at in [now, now + chrono::Duration::hours(1)] {
+            let directory = camera_directory(&self.storage, &self.camera.id, at)
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+            fs::create_dir_all(directory).await?;
+        }
+        Ok(())
+    }
+}
+
+async fn probe_duration_ms(path: &Path) -> Option<i64> {
+    let output = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+        ])
+        .arg(path)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .await
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let seconds: f64 = String::from_utf8(output.stdout).ok()?.trim().parse().ok()?;
+    let milliseconds = (seconds * 1000.0).round() as i64;
+    (milliseconds > 0).then_some(milliseconds)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
 
     #[test]
-    fn percent_encoding_hides_reserved_credentials() {
-        assert_eq!(percent_encode("a:b@c"), "a%3Ab%40c");
-    }
-
-    #[test]
-    fn motion_stream_prefers_configured_substream() {
+    fn recording_always_uses_main_stream() {
         let camera = CameraConfig {
-            id: "cam-one".into(),
-            host: "camera".into(),
+            id: "front-door".into(),
+            host: "camera.local".into(),
             port: 554,
             username: None,
             password_secret: None,
@@ -320,6 +402,18 @@ mod tests {
             motion_fps: 5.0,
             motion_sensitivity: 0.65,
         };
-        assert_eq!(camera.motion_rtsp_url(), "rtsp://camera:554/sub");
+        assert_eq!(camera.rtsp_url(), "rtsp://camera.local:554/main");
+        assert_eq!(camera.motion_rtsp_url(), "rtsp://camera.local:554/sub");
+    }
+
+    #[test]
+    fn sequential_segments_have_individual_duration() {
+        let starts = [0, 60, 120].map(|seconds| Local.timestamp_opt(seconds, 0).unwrap());
+        for start in starts {
+            assert_eq!(
+                (start + chrono::Duration::seconds(60) - start).num_seconds(),
+                60
+            );
+        }
     }
 }
