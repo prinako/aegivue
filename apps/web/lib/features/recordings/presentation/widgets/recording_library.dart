@@ -97,14 +97,16 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
               ),
               const SizedBox(height: 18),
               FilledButton.icon(
-                onPressed: () => Navigator.of(sheetContext).pop(_ExpiryAction.pick),
+                onPressed: () =>
+                    Navigator.of(sheetContext).pop(_ExpiryAction.pick),
                 icon: const Icon(Icons.event_rounded),
                 label: const Text('Choose expiry date'),
               ),
               if (recording.expiresAt != null) ...[
                 const SizedBox(height: 8),
                 TextButton.icon(
-                  onPressed: () => Navigator.of(sheetContext).pop(_ExpiryAction.clear),
+                  onPressed: () =>
+                      Navigator.of(sheetContext).pop(_ExpiryAction.clear),
                   icon: const Icon(Icons.all_inclusive_rounded),
                   label: const Text('Keep indefinitely'),
                 ),
@@ -125,7 +127,11 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
         initialDate: initial != null && initial.isAfter(now)
             ? initial
             : now.add(const Duration(days: 7)),
-        firstDate: DateTime(now.year, now.month, now.day).add(const Duration(days: 1)),
+        firstDate: DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).add(const Duration(days: 1)),
         lastDate: DateTime(now.year + 10, 12, 31),
         helpText: 'Delete recording after',
       );
