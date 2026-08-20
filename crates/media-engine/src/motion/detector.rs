@@ -174,16 +174,7 @@ fn start_ffmpeg(camera: &CameraConfig) -> Result<Child, io::Error> {
         ])
         .arg(camera.motion_rtsp_url())
         .args([
-            "-map",
-            "0:v:0",
-            "-an",
-            "-vf",
-            &filter,
-            "-pix_fmt",
-            "gray",
-            "-f",
-            "rawvideo",
-            "pipe:1",
+            "-map", "0:v:0", "-an", "-vf", &filter, "-pix_fmt", "gray", "-f", "rawvideo", "pipe:1",
         ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
