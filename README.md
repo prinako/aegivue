@@ -128,6 +128,21 @@ Stop Aegivue without deleting its database or recordings:
 docker compose down
 ```
 
+### Upgrading an existing installation
+
+Aegivue application images and PostgreSQL migrations must be upgraded together. The stock migration service currently reads migration files from the local repository checkout, so pulling newer GHCR images without updating the checkout can leave the database schema behind the running application.
+
+Before upgrading, back up PostgreSQL and the recording volume. Then update the checkout, pull images, run migrations explicitly, and recreate the stack:
+
+```sh
+git pull
+docker compose pull
+docker compose run --rm aegivue-migrate
+docker compose up -d
+```
+
+If a camera starts reporting errors such as `column ... does not exist`, verify the active database's `schema_migrations` table before restarting services repeatedly. See [Upgrades and database migrations](docs/operations/upgrades.md) for schema verification, customized deployments, and recovery guidance.
+
 ## Documentation
 
 More focused guides live in [`docs`](docs/README.md):
@@ -135,6 +150,7 @@ More focused guides live in [`docs`](docs/README.md):
 | Guide | Covers |
 | --- | --- |
 | [Development setup](docs/development/getting-started.md) | Prerequisites, local containers, exact CI checks, and integration testing |
+| [Upgrades and database migrations](docs/operations/upgrades.md) | Safe upgrades, schema verification, migration troubleshooting, and customized deployments |
 | [Adding an RTSP camera](docs/cameras/rtsp.md) | Stream configuration, WebRTC/HLS verification, and camera troubleshooting |
 | [Service-boundaries ADR](docs/architecture/0001-service-boundaries.md) | Component ownership, design decisions, and operational consequences |
 
@@ -337,6 +353,8 @@ If the dashboard works but live video fails from another device:
 
 If a camera remains offline, verify its RTSP host, port, credentials, and stream path from the network where the media engine runs.
 
+If logs report that a required PostgreSQL table or column does not exist, treat it as a schema-version problem rather than a camera problem. Follow [Upgrades and database migrations](docs/operations/upgrades.md) to verify the active database and migration history.
+
 ## Security
 
 Aegivue currently has **no built-in authentication or authorization**. Keep it private or place it behind an authenticated reverse proxy.
@@ -353,6 +371,7 @@ Near-term priorities:
 
 - Application authentication and authorization
 - Encrypted camera secret storage
+- Deployment hardening with versioned migration artifacts and schema-version checks
 - More complete Provider-driven camera mutations in Flutter
 - Improved recording-library UX
 - Browser-native fullscreen support for focused live cameras

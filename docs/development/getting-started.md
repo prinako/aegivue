@@ -41,6 +41,10 @@ checkout:
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
+The stock Compose stack runs `aegivue-migrate` before the API and media engine.
+Migration files are read from the current checkout under `database/migrations`, so
+local source and local schema should normally move together during development.
+
 Once the health checks pass, open:
 
 | Service | Address |
@@ -64,6 +68,39 @@ docker compose down
 
 Do not add `--volumes` unless you intend to delete local PostgreSQL data and
 recordings managed by Compose.
+
+## Database migrations during development
+
+Schema changes live in `database/migrations` and are applied in filename order by
+`database/migrate.sh`. Applied filenames are recorded in the `schema_migrations`
+table.
+
+When adding a schema change, create a new numbered migration rather than modifying
+a migration that may already have been applied, for example:
+
+```text
+0005_add_storage_quota.sql
+```
+
+Run the migration job explicitly when you want to verify a migration without
+rebuilding the entire stack:
+
+```sh
+docker compose run --rm aegivue-migrate
+```
+
+Inspect applied migrations with:
+
+```sh
+docker compose exec aegivue-postgres \
+  psql -U aegivue -d aegivue \
+  -c "SELECT name, applied_at FROM schema_migrations ORDER BY applied_at;"
+```
+
+If application code reports a missing table or column, verify the active database
+schema before debugging camera or media code. See
+[Upgrades and database migrations](../operations/upgrades.md) for the production
+upgrade model and schema-mismatch troubleshooting.
 
 ## Run the CI checks locally
 
@@ -125,7 +162,11 @@ arguments followed by `down`.
   the process already using ports 3000, 8080, 5432, or UDP 8189.
 - **A container stays unhealthy:** run `docker compose ps` and inspect that
   service's logs. Database migration failures commonly indicate an incorrect
-  `AEGIVUE_POSTGRES_PASSWORD` or stale local configuration.
+  `AEGIVUE_POSTGRES_PASSWORD`, stale local configuration, or an application/schema
+  version mismatch.
+- **A required PostgreSQL column does not exist:** run the migration job explicitly,
+  inspect `schema_migrations`, and confirm the migration file exists in the active
+  checkout before restarting services.
 - **Formatting passes locally but fails in CI:** use Node.js 22, stable rustfmt,
   and Flutter 3.38.7, matching [CI](../../.github/workflows/ci.yml).
 - **Live video does not work from another device:** follow the WebRTC and HLS
