@@ -171,3 +171,12 @@ arguments followed by `down`.
   and Flutter 3.38.7, matching [CI](../../.github/workflows/ci.yml).
 - **Live video does not work from another device:** follow the WebRTC and HLS
   checks in [Adding an RTSP camera](../cameras/rtsp.md#troubleshooting).
+
+## Next steps
+
+- Read the [system architecture](../architecture/overview.md) before changing
+  cross-service behavior.
+- Use the [configuration reference](../reference/configuration.md) when adding or
+  changing an environment variable.
+- Keep the [troubleshooting runbook](../operations/troubleshooting.md) aligned with
+  new failure modes and diagnostic commands.
