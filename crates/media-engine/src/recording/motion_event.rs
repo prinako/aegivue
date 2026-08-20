@@ -151,12 +151,9 @@ impl MotionEventRecorder {
                         %error,
                         "pre-event concat failed; preserving the event recording without prebuffer"
                     );
-                    let fallback = segment_path(
-                        &self.storage,
-                        &self.camera.id,
-                        self.event_started_at,
-                    )
-                    .map_err(|path_error| path_error.to_string())?;
+                    let fallback =
+                        segment_path(&self.storage, &self.camera.id, self.event_started_at)
+                            .map_err(|path_error| path_error.to_string())?;
                     if let Some(parent) = fallback.parent() {
                         fs::create_dir_all(parent)
                             .await
