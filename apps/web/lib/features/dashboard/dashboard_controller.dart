@@ -98,7 +98,10 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
-  Future<void> setRecordingExpiry(Recording recording, DateTime? expiresAt) async {
+  Future<void> setRecordingExpiry(
+    Recording recording,
+    DateTime? expiresAt,
+  ) async {
     final updated = await recordings.setExpiry(recording.id, expiresAt);
     final items = [..._recordingItems];
     final index = items.indexWhere((item) => item.id == updated.id);
