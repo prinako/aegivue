@@ -129,3 +129,9 @@ Aegivue release
 ```
 
 Until then, always update the local repository checkout before running the migration service during an upgrade.
+
+## Related guides
+
+- [Configuration reference](../reference/configuration.md)
+- [Troubleshooting runbook](troubleshooting.md)
+- [System architecture](../architecture/overview.md)
