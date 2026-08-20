@@ -118,8 +118,8 @@ impl PreEventBuffer {
             let Some(duration_ms) = probe_duration_ms(&source).await else {
                 continue;
             };
-            let target = segment_path(storage, &camera.id, start)
-                .map_err(|error| error.to_string())?;
+            let target =
+                segment_path(storage, &camera.id, start).map_err(|error| error.to_string())?;
             if fs::try_exists(&target).await.unwrap_or(false) {
                 continue;
             }
