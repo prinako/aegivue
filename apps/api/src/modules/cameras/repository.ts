@@ -18,6 +18,7 @@ export interface CameraView {
     mode: "continuous" | "motion";
     preEventSeconds: number;
     postEventSeconds: number;
+    retentionDays: number | null;
   };
   motion: {
     enabled: boolean;
@@ -46,6 +47,10 @@ const map = (r: Record<string, unknown>): CameraView => ({
     mode: r.recording_mode as "continuous" | "motion",
     preEventSeconds: Number(r.pre_event_seconds),
     postEventSeconds: Number(r.post_event_seconds),
+    retentionDays:
+      r.recording_retention_days === null || r.recording_retention_days === undefined
+        ? null
+        : Number(r.recording_retention_days),
   },
   motion: {
     enabled: Boolean(r.motion_enabled),
@@ -94,13 +99,14 @@ export class CameraRepository {
         ],
       );
       await client.query(
-        `INSERT INTO recording_configs(camera_id,enabled,mode,pre_event_seconds,post_event_seconds) VALUES($1,$2,$3,$4,$5)`,
+        `INSERT INTO recording_configs(camera_id,enabled,mode,pre_event_seconds,post_event_seconds,retention_days) VALUES($1,$2,$3,$4,$5,$6)`,
         [
           c.id,
           c.recording.enabled,
           c.recording.mode,
           c.recording.preEventSeconds,
           c.recording.postEventSeconds,
+          c.recording.retentionDays,
         ],
       );
       await client.query(
@@ -153,7 +159,7 @@ export class CameraRepository {
       }
       await client.query(
         `UPDATE recording_configs
-         SET enabled=$2,mode=$3,pre_event_seconds=$4,post_event_seconds=$5
+         SET enabled=$2,mode=$3,pre_event_seconds=$4,post_event_seconds=$5,retention_days=$6
          WHERE camera_id=$1`,
         [
           id,
@@ -161,6 +167,7 @@ export class CameraRepository {
           c.recording.mode,
           c.recording.preEventSeconds,
           c.recording.postEventSeconds,
+          c.recording.retentionDays,
         ],
       );
       await client.query(
