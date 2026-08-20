@@ -23,6 +23,7 @@ pub struct CameraConfig {
     pub main_stream: String,
     pub sub_stream: Option<String>,
     pub recording_enabled: bool,
+    pub retention_days: Option<i32>,
 }
 
 impl CameraConfig {
@@ -113,9 +114,6 @@ impl Recorder {
                 "0:v:0",
                 "-map",
                 "0:a?",
-                // Camera video is already H.264 in the common case, so keep it zero-copy.
-                // Audio codecs such as G.711/PCM mu-law cannot be muxed directly into MP4;
-                // transcode only the small audio stream to AAC for broad MP4 compatibility.
                 "-c:v",
                 "copy",
                 "-c:a",
@@ -243,12 +241,16 @@ impl Recorder {
         duration_ms: i64,
     ) -> Result<(), sqlx::Error> {
         let end = start + chrono::Duration::milliseconds(duration_ms);
+        let expires_at = self
+            .camera
+            .retention_days
+            .map(|days| end + chrono::Duration::days(i64::from(days)));
         let relative = final_path
             .strip_prefix(&self.storage)
             .unwrap_or(final_path)
             .to_string_lossy()
             .into_owned();
-        sqlx::query("INSERT INTO recordings(id,camera_id,start_time,end_time,file_path,file_size,container,duration_ms) VALUES($1,$2,$3,$4,$5,$6,'mp4',$7) ON CONFLICT(file_path) DO NOTHING")
+        sqlx::query("INSERT INTO recordings(id,camera_id,start_time,end_time,file_path,file_size,container,duration_ms,expires_at) VALUES($1,$2,$3,$4,$5,$6,'mp4',$7,$8) ON CONFLICT(file_path) DO NOTHING")
             .bind(Uuid::new_v4())
             .bind(&self.camera.id)
             .bind(start)
@@ -256,6 +258,7 @@ impl Recorder {
             .bind(relative)
             .bind(file_size as i64)
             .bind(duration_ms)
+            .bind(expires_at)
             .execute(&self.database)
             .await?;
         Ok(())
@@ -379,6 +382,7 @@ mod tests {
             main_stream: "/main".into(),
             sub_stream: Some("/sub".into()),
             recording_enabled: true,
+            retention_days: Some(30),
         };
         assert_eq!(camera.rtsp_url(), "rtsp://camera.local:554/main");
     }

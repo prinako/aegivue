@@ -13,6 +13,8 @@ class Recording {
     this.width,
     this.height,
     this.fps,
+    this.protected = false,
+    this.expiresAt,
   });
 
   final String id;
@@ -28,6 +30,8 @@ class Recording {
   final int? width;
   final int? height;
   final double? fps;
+  final bool protected;
+  final DateTime? expiresAt;
 
   factory Recording.fromJson(Map<String, Object?> json) => Recording(
     id: json['id']! as String,
@@ -45,5 +49,9 @@ class Recording {
     width: (json['width'] as num?)?.toInt(),
     height: (json['height'] as num?)?.toInt(),
     fps: (json['fps'] as num?)?.toDouble(),
+    protected: json['protected'] as bool? ?? false,
+    expiresAt: json['expiresAt'] == null
+        ? null
+        : DateTime.parse(json['expiresAt']! as String),
   );
 }

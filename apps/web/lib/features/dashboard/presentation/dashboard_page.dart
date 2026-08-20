@@ -111,6 +111,7 @@ class _DashboardPageState extends State<DashboardPage> {
         recordings: data.recordings,
         onRefresh: controller.refresh,
         onLoadMore: controller.loadMoreRecordings,
+        onSetExpiry: controller.setRecordingExpiry,
         hasMore: controller.hasMoreRecordings,
         loadingMore: controller.loadingMoreRecordings,
       ),

@@ -10,6 +10,9 @@ const pagination = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 });
 const recordingId = z.string().uuid();
+const expiryUpdate = z.object({
+  expiresAt: z.string().datetime().nullable(),
+});
 
 export const recordingRoutes: FastifyPluginAsync<{
   storagePath: string;
@@ -41,6 +44,34 @@ export const recordingRoutes: FastifyPluginAsync<{
         .code(400)
         .send({ code: "VALIDATION_ERROR", message: "Invalid recording id" });
     const recording = await repository.find(parsed.data);
+    return (
+      recording ??
+      reply
+        .code(404)
+        .send({ code: "NOT_FOUND", message: "Recording not found" })
+    );
+  });
+  app.patch("/:id/expiry", async (request, reply) => {
+    const id = recordingId.safeParse((request.params as { id: string }).id);
+    const body = expiryUpdate.safeParse(request.body);
+    if (!id.success || !body.success) {
+      return reply.code(400).send({
+        code: "VALIDATION_ERROR",
+        message: "Invalid recording expiry",
+      });
+    }
+
+    const expiresAt = body.data.expiresAt
+      ? new Date(body.data.expiresAt)
+      : null;
+    if (expiresAt && expiresAt.getTime() <= Date.now()) {
+      return reply.code(400).send({
+        code: "INVALID_EXPIRY",
+        message: "Expiry must be in the future",
+      });
+    }
+
+    const recording = await repository.setExpiry(id.data, expiresAt);
     return (
       recording ??
       reply

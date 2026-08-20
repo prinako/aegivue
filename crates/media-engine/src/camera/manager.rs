@@ -101,7 +101,8 @@ impl CameraManager {
                 c.password_secret,
                 c.main_stream,
                 c.sub_stream,
-                COALESCE(rc.enabled, false) AS recording_enabled
+                COALESCE(rc.enabled, false) AS recording_enabled,
+                rc.retention_days
             FROM cameras c
             LEFT JOIN recording_configs rc ON rc.camera_id = c.id
             WHERE c.id = $1 AND c.enabled

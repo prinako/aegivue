@@ -1,4 +1,4 @@
-use aegivue_media::{camera::CameraManager, health};
+use aegivue_media::{camera::CameraManager, health, retention};
 use sqlx::postgres::PgPoolOptions;
 use std::{env, net::SocketAddr, path::PathBuf};
 use tokio_util::sync::CancellationToken;
@@ -28,8 +28,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&database_url)
         .await?;
     let shutdown = CancellationToken::new();
-    let manager = CameraManager::new(database, storage, shutdown.clone(), segment_seconds);
+    let manager = CameraManager::new(
+        database.clone(),
+        storage.clone(),
+        shutdown.clone(),
+        segment_seconds,
+    );
     manager.start_enabled().await?;
+
+    let retention_database = database.clone();
+    let retention_storage = storage.clone();
+    let retention_shutdown = shutdown.child_token();
+    tokio::spawn(async move {
+        retention::supervise(retention_database, retention_storage, retention_shutdown).await;
+    });
+
     let reconcile_manager = manager.clone();
     let reconcile_shutdown = shutdown.clone();
     tokio::spawn(async move {

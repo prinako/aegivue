@@ -29,12 +29,14 @@ class CameraRecordingConfig {
     required this.mode,
     required this.preEventSeconds,
     required this.postEventSeconds,
+    this.retentionDays,
   });
 
   final bool enabled;
   final String mode;
   final int preEventSeconds;
   final int postEventSeconds;
+  final int? retentionDays;
 
   factory CameraRecordingConfig.fromJson(Map<String, Object?> json) =>
       CameraRecordingConfig(
@@ -42,6 +44,7 @@ class CameraRecordingConfig {
         mode: json['mode']! as String,
         preEventSeconds: (json['preEventSeconds']! as num).toInt(),
         postEventSeconds: (json['postEventSeconds']! as num).toInt(),
+        retentionDays: (json['retentionDays'] as num?)?.toInt(),
       );
 }
 
@@ -128,6 +131,7 @@ class CameraConfiguration {
     required this.motionStream,
     required this.motionFps,
     required this.motionSensitivity,
+    this.recordingRetentionDays,
     this.username,
     this.password,
     this.subStream,
@@ -146,6 +150,7 @@ class CameraConfiguration {
   final String recordingMode;
   final int preEventSeconds;
   final int postEventSeconds;
+  final int? recordingRetentionDays;
   final bool motionEnabled;
   final String motionStream;
   final double motionFps;
@@ -169,6 +174,7 @@ class CameraConfiguration {
       'mode': recordingMode,
       'preEventSeconds': preEventSeconds,
       'postEventSeconds': postEventSeconds,
+      'retentionDays': recordingRetentionDays,
     },
     'motion': {
       'enabled': motionEnabled,
@@ -191,6 +197,7 @@ class CameraConfiguration {
     recordingMode: camera.recording.mode,
     preEventSeconds: camera.recording.preEventSeconds,
     postEventSeconds: camera.recording.postEventSeconds,
+    recordingRetentionDays: camera.recording.retentionDays,
     motionEnabled: camera.motion.enabled,
     motionStream: camera.motion.stream,
     motionFps: camera.motion.fps,

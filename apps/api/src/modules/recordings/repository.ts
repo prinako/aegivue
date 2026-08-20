@@ -13,6 +13,8 @@ export interface RecordingView {
   height: number | null;
   fps: number | null;
   durationMs: number | null;
+  protected: boolean;
+  expiresAt: string | null;
   playbackUrl: string;
   createdAt: string;
 }
@@ -30,6 +32,10 @@ const map = (row: Record<string, unknown>): RecordingView => ({
   height: row.height === null ? null : Number(row.height),
   fps: row.fps === null ? null : Number(row.fps),
   durationMs: row.duration_ms === null ? null : Number(row.duration_ms),
+  protected: Boolean(row.protected),
+  expiresAt: row.expires_at
+    ? new Date(row.expires_at as string).toISOString()
+    : null,
   playbackUrl: `/api/v1/recordings/${String(row.id)}/media`,
   createdAt: new Date(row.created_at as string).toISOString(),
 });
@@ -53,6 +59,17 @@ export class RecordingRepository {
     const { rows } = await this.db.query(
       "SELECT * FROM recordings WHERE id=$1",
       [id],
+    );
+    return rows[0] ? map(rows[0]) : null;
+  }
+
+  public async setExpiry(
+    id: string,
+    expiresAt: Date | null,
+  ): Promise<RecordingView | null> {
+    const { rows } = await this.db.query(
+      "UPDATE recordings SET expires_at=$2 WHERE id=$1 RETURNING *",
+      [id, expiresAt],
     );
     return rows[0] ? map(rows[0]) : null;
   }

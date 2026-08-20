@@ -10,7 +10,7 @@
 [![Docker](https://github.com/prinako/aegivue/actions/workflows/docker.yml/badge.svg)](https://github.com/prinako/aegivue/actions/workflows/docker.yml)
 [![License](https://img.shields.io/badge/license-see%20LICENSE-blue.svg)](LICENSE)
 
-[Features](#features) · [Project status](#project-status) · [Quick start](#quick-start) · [Architecture](#architecture) · [Frontend](#frontend) · [API](#api) · [Development](#development) · [Security](#security) · [Roadmap](#roadmap)
+[Features](#features) · [Project status](#project-status) · [Quick start](#quick-start) · [Documentation](#documentation) · [Architecture](#architecture) · [API](#api) · [Development](#development) · [Security](#security) · [Roadmap](#roadmap)
 
 </div>
 
@@ -30,7 +30,10 @@ Aegivue is an open-source NVR built around isolated camera workers, stream-copy 
 - Intelligent grid sizing based on viewport size and number of registered cameras
 - Click-to-focus camera viewing in a dedicated large viewer
 - Automatic substream preference for lower-bandwidth live viewing
-- Paginated recording history and HTTP byte-range playback
+- Per-camera recording controls and configurable retention periods
+- Automatic cleanup of expired recording files and metadata
+- Paginated recording history with playback, downloads, and expiry controls
+- HTTP byte-range media delivery for efficient seeking and playback
 - Camera lifecycle controls and runtime status reporting through a REST API
 - Flutter dashboard with Provider + ChangeNotifier state management
 - Feature-based Flutter project structure for cameras, dashboard, and recordings
@@ -48,11 +51,12 @@ Aegivue has moved beyond the initial prototype stage. The core recording, API, l
 | Docker / service architecture | Mature foundation | API, media engine, MediaMTX, PostgreSQL, Flutter/Nginx |
 | Camera configuration | Working | Create, edit, enable/disable, runtime state |
 | Continuous recording | Working | FFmpeg stream-copy segments with metadata indexing |
+| Recording retention | Working | Per-camera retention periods, per-recording expiry, background cleanup |
 | Live viewing | Working | WebRTC first, LL-HLS fallback |
 | Live camera wall | Working | Adaptive grid with focused camera view |
 | Flutter architecture | Working | Feature-based layout with shared/core modules |
 | Flutter state management | Working foundation | Provider + ChangeNotifier for dashboard state |
-| Recording library | In progress | Listing and playback exist; UX still evolving |
+| Recording library | Working foundation | Paginated browsing, playback, downloads, and expiry controls |
 | Authentication / authorization | Not implemented | Keep the app private or behind authenticated access |
 | Motion detection | Planned / early | Configuration fields exist; processing is not yet complete |
 | AI detection | Planned | Future dedicated processing service |
@@ -64,7 +68,7 @@ Aegivue has moved beyond the initial prototype stage. The core recording, API, l
 
 - Docker Engine
 - Docker Compose v2
-- An RTSP camera reachable from the Docker host
+- An RTSP camera reachable from the Docker host (optional for initial setup)
 
 Clone the repository and create your environment file:
 
@@ -124,6 +128,16 @@ Stop Aegivue without deleting its database or recordings:
 docker compose down
 ```
 
+## Documentation
+
+More focused guides live in [`docs`](docs/README.md):
+
+| Guide | Covers |
+| --- | --- |
+| [Development setup](docs/development/getting-started.md) | Prerequisites, local containers, exact CI checks, and integration testing |
+| [Adding an RTSP camera](docs/cameras/rtsp.md) | Stream configuration, WebRTC/HLS verification, and camera troubleshooting |
+| [Service-boundaries ADR](docs/architecture/0001-service-boundaries.md) | Component ownership, design decisions, and operational consequences |
+
 ## Architecture
 
 ```mermaid
@@ -146,7 +160,7 @@ flowchart LR
 | Component | Responsibility |
 | --- | --- |
 | [`apps/api`](apps/api) | TypeScript/Fastify control plane for configuration, camera lifecycle, recording metadata, and media-service coordination |
-| [`crates/media-engine`](crates/media-engine) | Rust/Tokio media plane with isolated camera workers and FFmpeg orchestration |
+| [`crates/media-engine`](crates/media-engine) | Rust/Tokio media plane with isolated camera workers, FFmpeg orchestration, and retention cleanup |
 | [`crates/aegivue-common`](crates/aegivue-common) | Shared Rust contracts used by the media components |
 | `aegivue-webrtc` | MediaMTX gateway for browser WebRTC and LL-HLS fallback |
 | [`apps/web`](apps/web) | Flutter dashboard served by Nginx with same-origin API, WHEP, and HLS proxying |
@@ -154,7 +168,7 @@ flowchart LR
 
 PostgreSQL's camera configuration is the durable desired state. The media engine reconciles enabled cameras and keeps per-camera workers isolated.
 
-FFmpeg writes active recording segments as `.mp4.partial` files under the camera storage hierarchy. Completed non-empty segments are atomically finalized to `.mp4` and indexed in PostgreSQL.
+FFmpeg writes active recording segments as `.mp4.partial` files under the camera storage hierarchy. Completed non-empty segments are atomically finalized to `.mp4` and indexed in PostgreSQL. Cameras can retain recordings indefinitely or assign an expiry from a per-camera retention period; the media engine periodically removes expired, unprotected recordings from both storage and PostgreSQL.
 
 ## Live preview
 
@@ -233,6 +247,7 @@ The API is rooted at `/api/v1`. Interactive OpenAPI documentation is available a
 | `GET` | `/cameras/:id/status` | Read the current worker state |
 | `GET` | `/recordings?page=1&pageSize=25` | List recordings |
 | `GET` | `/recordings/:id` | Read recording metadata |
+| `PATCH` | `/recordings/:id/expiry` | Set or clear a recording's expiry time |
 | `GET` | `/recordings/:id/media` | Stream media with HTTP byte-range support |
 
 Storage paths and camera passwords are not returned by the API.
@@ -265,23 +280,27 @@ cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-Run repository checks locally with Node.js 22+, a stable Rust toolchain, and the Flutter version configured for the web app:
+Run repository checks locally with Node.js 22+, a stable Rust toolchain, and
+Flutter 3.38.7:
 
 ```sh
 npm ci --prefix apps/api
-npm run typecheck
-npm test
-npm run build
+npm --prefix apps/api run typecheck
+npm --prefix apps/api run lint
+npm --prefix apps/api run format:check
+npm --prefix apps/api test
+npm --prefix apps/api run build
 
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 
 cd apps/web
-fvm flutter pub get
-fvm flutter analyze
-fvm flutter test
-fvm flutter build web
+flutter pub get
+dart format --output=none --set-exit-if-changed .
+flutter analyze
+flutter test
+flutter build web --release
 ```
 
 For a camera-free integration check:
@@ -337,7 +356,7 @@ Near-term priorities:
 - More complete Provider-driven camera mutations in Flutter
 - Improved recording-library UX
 - Browser-native fullscreen support for focused live cameras
-- Retention policies and storage management
+- Storage quotas, usage reporting, and protected-recording controls
 - ONVIF discovery and camera configuration
 - Motion detection and event indexing
 - Optional AI detection service
