@@ -41,6 +41,12 @@ impl CameraWorker {
     }
 
     pub async fn run(mut self) {
+        if !self.camera.recording_enabled {
+            self.run_live_only().await;
+            self.set_state(CameraState::Disabled);
+            return;
+        }
+
         let mut attempt = 0;
         loop {
             if self.shutdown.is_cancelled() {
@@ -117,6 +123,47 @@ impl CameraWorker {
             }
         }
         self.set_state(CameraState::Disabled);
+    }
+
+    async fn run_live_only(&mut self) {
+        if !self.set_state(CameraState::Connecting) {
+            return;
+        }
+
+        let live_shutdown = self.shutdown.child_token();
+        let live_task = tokio::spawn(live::supervise(self.camera.clone(), live_shutdown.clone()));
+
+        tracing::info!(
+            camera_id=%self.camera.id,
+            "recording disabled; running live preview without recorder"
+        );
+        if !self.set_state(CameraState::Online) {
+            live_shutdown.cancel();
+            let _ = live_task.await;
+            return;
+        }
+
+        loop {
+            tokio::select! {
+                command = self.commands.recv() => match command {
+                    Some(CameraCommand::Status(reply)) => {
+                        let _ = reply.send(*self.status.borrow());
+                    }
+                    Some(CameraCommand::Stop) | None => {
+                        self.set_state(CameraState::Stopping);
+                        live_shutdown.cancel();
+                        break;
+                    }
+                },
+                () = self.shutdown.cancelled() => {
+                    self.set_state(CameraState::Stopping);
+                    live_shutdown.cancel();
+                    break;
+                }
+            }
+        }
+
+        let _ = live_task.await;
     }
 
     fn set_state(&self, next: CameraState) -> bool {

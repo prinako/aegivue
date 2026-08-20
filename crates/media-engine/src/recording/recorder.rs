@@ -22,6 +22,7 @@ pub struct CameraConfig {
     pub password_secret: Option<String>,
     pub main_stream: String,
     pub sub_stream: Option<String>,
+    pub recording_enabled: bool,
 }
 
 impl CameraConfig {
@@ -377,6 +378,7 @@ mod tests {
             password_secret: None,
             main_stream: "/main".into(),
             sub_stream: Some("/sub".into()),
+            recording_enabled: true,
         };
         assert_eq!(camera.rtsp_url(), "rtsp://camera.local:554/main");
     }
