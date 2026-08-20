@@ -2,11 +2,7 @@ use sqlx::PgPool;
 use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
 
-pub async fn supervise(
-    database: PgPool,
-    storage: PathBuf,
-    shutdown: CancellationToken,
-) {
+pub async fn supervise(database: PgPool, storage: PathBuf, shutdown: CancellationToken) {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
     loop {
         tokio::select! {
@@ -52,10 +48,12 @@ async fn purge_expired(database: &PgPool, storage: &Path) -> Result<(), sqlx::Er
             }
         }
 
-        sqlx::query("DELETE FROM recordings WHERE id=$1 AND protected=false AND expires_at <= now()")
-            .bind(id)
-            .execute(database)
-            .await?;
+        sqlx::query(
+            "DELETE FROM recordings WHERE id=$1 AND protected=false AND expires_at <= now()",
+        )
+        .bind(id)
+        .execute(database)
+        .await?;
         tracing::info!(recording_id=%id, path=%path.display(), "expired recording deleted");
     }
 
@@ -64,9 +62,11 @@ async fn purge_expired(database: &PgPool, storage: &Path) -> Result<(), sqlx::Er
 
 fn safe_recording_path(storage: &Path, file_path: &str) -> Option<PathBuf> {
     let relative = Path::new(file_path);
-    if relative.is_absolute() || relative.components().any(|component| {
-        matches!(component, std::path::Component::ParentDir)
-    }) {
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
         return None;
     }
     Some(storage.join(relative))
