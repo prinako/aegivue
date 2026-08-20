@@ -2,8 +2,9 @@ use super::commands::CameraCommand;
 use crate::{
     ffmpeg, live, motion,
     recording::{
+        motion_event::MotionEventRecorder,
         prebuffer::{self, PreEventBuffer},
-        recorder::{CameraConfig, Recorder},
+        recorder::CameraConfig,
     },
     rtsp,
 };
@@ -21,9 +22,8 @@ use uuid::Uuid;
 
 struct MotionRecordingSession {
     event_id: Uuid,
-    started_at: DateTime<Utc>,
     child: Child,
-    recorder: Recorder,
+    recorder: MotionEventRecorder,
 }
 
 pub struct CameraWorker {
@@ -243,7 +243,6 @@ impl CameraWorker {
 
         let mut event_poll = tokio::time::interval(Duration::from_millis(250));
         event_poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        let mut metadata_tick = tokio::time::interval(Duration::from_secs(5));
         let mut session: Option<MotionRecordingSession> = None;
 
         loop {
@@ -262,11 +261,6 @@ impl CameraWorker {
                     self.set_state(CameraState::Stopping);
                     auxiliary_shutdown.cancel();
                     break;
-                }
-                _ = metadata_tick.tick() => {
-                    if let Some(active) = session.as_ref() {
-                        active.recorder.persist_segments(false).await;
-                    }
                 }
                 _ = event_poll.tick() => {
                     if let Some(active) = session.as_mut()
@@ -287,33 +281,14 @@ impl CameraWorker {
 
                     match (session.is_some(), desired_event) {
                         (false, Some((event_id, event_started_at))) => {
-                            if let Some(buffer) = prebuffer.as_ref() {
-                                match buffer
-                                    .promote(
-                                        &self.camera,
-                                        &self.storage,
-                                        &self.database,
-                                        event_id,
-                                        event_started_at.with_timezone(&Local),
-                                    )
-                                    .await
-                                {
-                                    Ok(count) => tracing::info!(
-                                        camera_id=%self.camera.id,
-                                        event_id=%event_id,
-                                        promoted_segments=count,
-                                        pre_event_seconds=self.pre_event_seconds,
-                                        "pre-event recording buffer promoted"
-                                    ),
-                                    Err(error) => tracing::warn!(
-                                        camera_id=%self.camera.id,
-                                        event_id=%event_id,
-                                        %error,
-                                        "unable to promote pre-event recording buffer"
-                                    ),
-                                }
-                            }
-                            match self.start_motion_session(event_id).await {
+                            match self
+                                .start_motion_session(
+                                    event_id,
+                                    event_started_at,
+                                    prebuffer.as_deref(),
+                                )
+                                .await
+                            {
                                 Ok(started) => session = Some(started),
                                 Err(error) => tracing::warn!(camera_id=%self.camera.id, event_id=%event_id, %error, "unable to start motion-triggered recorder"),
                             }
@@ -352,14 +327,21 @@ impl CameraWorker {
         .await
     }
 
-    async fn start_motion_session(&self, event_id: Uuid) -> Result<MotionRecordingSession, String> {
-        let recorder = Recorder::new(
+    async fn start_motion_session(
+        &self,
+        event_id: Uuid,
+        event_started_at: DateTime<Utc>,
+        prebuffer: Option<&PreEventBuffer>,
+    ) -> Result<MotionRecordingSession, String> {
+        let (recorder, mut child) = MotionEventRecorder::start(
             self.camera.clone(),
             self.storage.clone(),
             self.database.clone(),
-            self.segment_seconds,
-        );
-        let mut child = recorder.start().await.map_err(|error| error.to_string())?;
+            event_id,
+            event_started_at.with_timezone(&Local),
+            prebuffer,
+        )
+        .await?;
         ffmpeg::log_stderr(
             &mut child,
             &self.camera.id,
@@ -367,11 +349,14 @@ impl CameraWorker {
             self.camera.username.as_deref(),
             self.camera.password_secret.as_deref(),
         );
-        let started_at = Utc::now();
-        tracing::info!(camera_id=%self.camera.id, event_id=%event_id, "motion-triggered recorder started");
+        tracing::info!(
+            camera_id=%self.camera.id,
+            event_id=%event_id,
+            pre_event_segments=recorder.pre_event_segment_count(),
+            "motion-triggered recorder started"
+        );
         Ok(MotionRecordingSession {
             event_id,
-            started_at,
             child,
             recorder,
         })
@@ -379,20 +364,20 @@ impl CameraWorker {
 
     async fn finish_motion_session(&self, mut session: MotionRecordingSession) {
         ffmpeg::terminate(&mut session.child, &self.camera.id, "motion-recording").await;
-        session.recorder.finalize().await;
-
-        if let Err(error) = sqlx::query(
-            "UPDATE recordings SET event_id=$1 WHERE camera_id=$2 AND event_id IS NULL AND start_time >= $3 - INTERVAL '2 seconds' AND start_time <= now()",
-        )
-        .bind(session.event_id)
-        .bind(&self.camera.id)
-        .bind(session.started_at)
-        .execute(&self.database)
-        .await
-        {
-            tracing::warn!(camera_id=%self.camera.id, event_id=%session.event_id, %error, "unable to link motion recording to event");
+        match session.recorder.finalize().await {
+            Ok(path) => tracing::info!(
+                camera_id=%self.camera.id,
+                event_id=%session.event_id,
+                path=%path.display(),
+                "motion-triggered recorder stopped"
+            ),
+            Err(error) => tracing::warn!(
+                camera_id=%self.camera.id,
+                event_id=%session.event_id,
+                %error,
+                "unable to finalize motion-triggered recording"
+            ),
         }
-        tracing::info!(camera_id=%self.camera.id, event_id=%session.event_id, "motion-triggered recorder stopped");
     }
 
     async fn run_live_only(&mut self) {
