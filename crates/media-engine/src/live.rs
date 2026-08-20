@@ -142,8 +142,6 @@ pub async fn supervise(camera: CameraConfig, shutdown: CancellationToken) {
     }
 }
 
-// Kept for compatibility with the existing internal HLS asset route. HLS fallback
-// is now served by MediaMTX through Nginx, so this directory is no longer populated.
 pub fn root() -> PathBuf {
     live_root()
 }
@@ -162,6 +160,7 @@ mod tests {
             main_stream: "/main".into(),
             sub_stream: sub_stream.map(str::to_owned),
             recording_enabled: false,
+            retention_days: None,
         }
     }
 
