@@ -22,6 +22,7 @@ const recording = z.object({
   mode: z.enum(["continuous", "motion"]).default("continuous"),
   preEventSeconds: z.number().int().min(0).max(120).default(5),
   postEventSeconds: z.number().int().min(0).max(600).default(15),
+  retentionDays: z.number().int().min(1).max(3650).nullable().default(null),
 });
 
 const motion = z.object({
