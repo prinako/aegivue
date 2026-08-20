@@ -205,38 +205,50 @@ fn motion_score(previous: &[u8], current: &[u8]) -> f64 {
     let changed = previous
         .iter()
         .zip(current)
-        .filter(|(before, after)| before.abs_diff(**after) >= PIXEL_DELTA_THRESHOLD)
+        .filter(|(before, after)| (**before).abs_diff(**after) >= PIXEL_DELTA_THRESHOLD)
         .count();
     changed as f64 / previous.len() as f64
 }
 
-async fn start_event(database: &PgPool, camera: &CameraConfig, score: f64) -> Result<Uuid, sqlx::Error> {
+async fn start_event(
+    database: &PgPool,
+    camera: &CameraConfig,
+    score: f64,
+) -> Result<Uuid, sqlx::Error> {
     let event_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO events(id,camera_id,kind,started_at,score,metadata) VALUES($1,$2,'motion',now(),$3,$4)",
-    )
-    .bind(event_id)
-    .bind(&camera.id)
-    .bind(score)
-    .bind(json!({
+    let metadata = json!({
         "detector": "frame-difference-v1",
         "stream": camera.motion_stream,
         "analysisFps": camera.motion_fps,
         "sensitivity": camera.motion_sensitivity,
         "width": WIDTH,
         "height": HEIGHT
-    }))
+    })
+    .to_string();
+    sqlx::query(
+        "INSERT INTO events(id,camera_id,kind,started_at,score,metadata) VALUES($1,$2,'motion',now(),$3::double precision::numeric,$4::jsonb)",
+    )
+    .bind(event_id)
+    .bind(&camera.id)
+    .bind(score)
+    .bind(metadata)
     .execute(database)
     .await?;
     Ok(event_id)
 }
 
-async fn update_event_score(database: &PgPool, event_id: Uuid, score: f64) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE events SET score=GREATEST(COALESCE(score,0),$2) WHERE id=$1")
-        .bind(event_id)
-        .bind(score)
-        .execute(database)
-        .await?;
+async fn update_event_score(
+    database: &PgPool,
+    event_id: Uuid,
+    score: f64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE events SET score=GREATEST(COALESCE(score,0),$2::double precision::numeric) WHERE id=$1",
+    )
+    .bind(event_id)
+    .bind(score)
+    .execute(database)
+    .await?;
     Ok(())
 }
 
