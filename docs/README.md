@@ -8,6 +8,7 @@ Start with the guide that matches what you are trying to do:
 | [Development setup](development/getting-started.md) | Setting up a local checkout, running the stack, or reproducing CI checks |
 | [Upgrades and database migrations](operations/upgrades.md) | Upgrading an installation, verifying schema state, or diagnosing missing tables/columns |
 | [Adding an RTSP camera](cameras/rtsp.md) | Connecting a camera or diagnosing an offline stream |
+| [Motion detection and events](motion/events.md) | Configuring motion analysis, understanding event generation, using the Events API, or troubleshooting motion triggers |
 | [ADR 0001: Service boundaries](architecture/0001-service-boundaries.md) | Understanding why the API, media engine, database, and media storage are separate |
 
 The project overview, deployment quick start, configuration reference, and current
