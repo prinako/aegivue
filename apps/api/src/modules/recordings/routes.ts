@@ -151,13 +151,10 @@ export const recordingRoutes: FastifyPluginAsync<{
         );
       }
     });
-    request.raw.once("close", () => {
-      if (!ffmpeg.killed) ffmpeg.kill("SIGTERM");
-    });
 
     reply
       .header("Content-Type", "image/jpeg")
-      .header("Cache-Control", "private, max-age=86400");
+      .header("Cache-Control", "public, max-age=604800, immutable");
     return await reply.send(ffmpeg.stdout);
   });
   app.get("/:id/media", async (request, reply) => {
