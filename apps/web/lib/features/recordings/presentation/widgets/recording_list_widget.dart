@@ -105,22 +105,39 @@ class _RecordingCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
+                  Image.network(
+                    recording.thumbnailUrl,
+                    fit: BoxFit.cover,
+                    filterQuality: FilterQuality.low,
+                    errorBuilder: (context, error, stackTrace) => DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white.withValues(alpha: 0.035),
+                            Colors.black.withValues(alpha: 0.15),
+                          ],
+                        ),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.videocam_outlined,
+                          size: 42,
+                          color: Colors.white24,
+                        ),
+                      ),
+                    ),
+                  ),
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                         colors: [
-                          Colors.white.withValues(alpha: 0.035),
-                          Colors.black.withValues(alpha: 0.15),
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.22),
                         ],
-                      ),
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.videocam_outlined,
-                        size: 42,
-                        color: Colors.white24,
                       ),
                     ),
                   ),
@@ -136,28 +153,6 @@ class _RecordingCard extends StatelessWidget {
                         Icons.play_arrow_rounded,
                         color: Colors.white,
                         size: 28,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 10,
-                    bottom: 9,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.62),
-                        borderRadius: BorderRadius.circular(7),
-                      ),
-                      child: const Text(
-                        'Click to load',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                        ),
                       ),
                     ),
                   ),
