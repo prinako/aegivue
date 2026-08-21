@@ -33,6 +33,8 @@ class Recording {
   final bool protected;
   final DateTime? expiresAt;
 
+  String get thumbnailUrl => '/api/v1/recordings/$id/thumbnail';
+
   factory Recording.fromJson(Map<String, Object?> json) => Recording(
     id: json['id']! as String,
     cameraId: json['cameraId']! as String,
