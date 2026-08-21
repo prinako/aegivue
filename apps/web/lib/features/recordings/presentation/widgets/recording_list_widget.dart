@@ -1,7 +1,6 @@
 import 'package:aegivue/core/utils/formatters.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:aegivue/features/recordings/presentation/recording_download.dart';
-import 'package:aegivue/features/recordings/presentation/widgets/recording_player.dart';
 import 'package:flutter/material.dart';
 
 class RecordingListWidget extends StatelessWidget {
@@ -106,9 +105,56 @@ class _RecordingCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  RecordingPlayer(
-                    playbackUrl: recording.playbackUrl,
-                    thumbnail: true,
+                  Image.network(
+                    recording.thumbnailUrl,
+                    fit: BoxFit.cover,
+                    filterQuality: FilterQuality.low,
+                    errorBuilder: (context, error, stackTrace) => DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white.withValues(alpha: 0.035),
+                            Colors.black.withValues(alpha: 0.15),
+                          ],
+                        ),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.videocam_outlined,
+                          size: 42,
+                          color: Colors.white24,
+                        ),
+                      ),
+                    ),
+                  ),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.22),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.62),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
                   ),
                   Positioned(
                     right: 10,

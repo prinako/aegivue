@@ -1,6 +1,5 @@
-use super::{paths::segment_path, recorder::CameraConfig};
+use super::recorder::CameraConfig;
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone};
-use sqlx::PgPool;
 use std::{
     path::{Path, PathBuf},
     process::Stdio,
@@ -11,7 +10,6 @@ use tokio::{
     process::{Child, Command},
 };
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 
 const BUFFER_SEGMENT_SECONDS: u64 = 1;
 const PRUNE_INTERVAL_SECONDS: u64 = 2;
@@ -97,84 +95,19 @@ impl PreEventBuffer {
         }
     }
 
-    pub async fn promote(
-        &self,
-        camera: &CameraConfig,
-        storage: &Path,
-        database: &PgPool,
-        event_id: Uuid,
-        trigger_at: DateTime<Local>,
-    ) -> Result<usize, String> {
-        let mut segments = self.segments_before(trigger_at).await;
-
-        // FFmpeg is still writing the newest segment. Never copy that file; the
-        // preceding segment is the newest one known to be closed and playable.
-        if !segments.is_empty() {
-            segments.pop();
-        }
-
-        let mut promoted = 0usize;
-        for (source, start) in segments {
-            let Some(duration_ms) = probe_duration_ms(&source).await else {
-                continue;
-            };
-            let target =
-                segment_path(storage, &camera.id, start).map_err(|error| error.to_string())?;
-            if fs::try_exists(&target).await.unwrap_or(false) {
-                continue;
-            }
-            if let Some(parent) = target.parent() {
-                fs::create_dir_all(parent)
-                    .await
-                    .map_err(|error| error.to_string())?;
-            }
-            fs::copy(&source, &target)
-                .await
-                .map_err(|error| error.to_string())?;
-            let metadata = fs::metadata(&target)
-                .await
-                .map_err(|error| error.to_string())?;
-            let end = start + chrono::Duration::milliseconds(duration_ms);
-            let expires_at = camera
-                .retention_days
-                .map(|days| end + chrono::Duration::days(i64::from(days)));
-            let relative = target
-                .strip_prefix(storage)
-                .unwrap_or(&target)
-                .to_string_lossy()
-                .into_owned();
-
-            sqlx::query(
-                "INSERT INTO recordings(id,camera_id,event_id,start_time,end_time,file_path,file_size,container,duration_ms,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,'mp4',$8,$9) ON CONFLICT(file_path) DO NOTHING",
-            )
-            .bind(Uuid::new_v4())
-            .bind(&camera.id)
-            .bind(event_id)
-            .bind(start)
-            .bind(end)
-            .bind(relative)
-            .bind(metadata.len() as i64)
-            .bind(duration_ms)
-            .bind(expires_at)
-            .execute(database)
-            .await
-            .map_err(|error| error.to_string())?;
-            promoted += 1;
-        }
-        Ok(promoted)
-    }
-
-    async fn segments_before(
+    pub async fn snapshot(
         &self,
         trigger_at: DateTime<Local>,
-    ) -> Vec<(PathBuf, DateTime<Local>)> {
+        destination: &Path,
+    ) -> Result<Vec<(PathBuf, DateTime<Local>)>, String> {
         if self.keep_seconds <= 0 {
-            return Vec::new();
+            return Ok(Vec::new());
         }
+
         let cutoff = trigger_at - chrono::Duration::seconds(i64::from(self.keep_seconds));
-        let mut result = Vec::new();
+        let mut candidates = Vec::new();
         let Ok(mut entries) = fs::read_dir(&self.root).await else {
-            return result;
+            return Ok(candidates);
         };
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
@@ -182,11 +115,33 @@ impl PreEventBuffer {
                 continue;
             };
             if start >= cutoff && start < trigger_at {
-                result.push((path, start));
+                candidates.push((path, start));
             }
         }
-        result.sort_by_key(|(_, start)| *start);
-        result
+        candidates.sort_by_key(|(_, start)| *start);
+
+        // FFmpeg may still have the newest segment open. Keep it out of the
+        // event snapshot so only complete MP4 files are assembled later.
+        if !candidates.is_empty() {
+            candidates.pop();
+        }
+
+        fs::create_dir_all(destination)
+            .await
+            .map_err(|error| error.to_string())?;
+        let mut staged = Vec::new();
+        for (index, (source, start)) in candidates.into_iter().enumerate() {
+            let target = destination.join(format!("pre-{index:04}.mp4"));
+            if fs::copy(&source, &target).await.is_err() {
+                continue;
+            }
+            if probe_duration_ms(&target).await.is_none() {
+                let _ = fs::remove_file(&target).await;
+                continue;
+            }
+            staged.push((target, start));
+        }
+        Ok(staged)
     }
 }
 

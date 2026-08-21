@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { resolve, sep } from "node:path";
 import { RecordingRepository } from "./repository.js";
 
@@ -78,6 +79,86 @@ export const recordingRoutes: FastifyPluginAsync<{
         .code(404)
         .send({ code: "NOT_FOUND", message: "Recording not found" })
     );
+  });
+  app.get("/:id/thumbnail", async (request, reply) => {
+    const parsed = recordingId.safeParse((request.params as { id: string }).id);
+    if (!parsed.success)
+      return reply
+        .code(400)
+        .send({ code: "VALIDATION_ERROR", message: "Invalid recording id" });
+
+    const recording = await repository.findFile(parsed.data);
+    if (!recording)
+      return reply
+        .code(404)
+        .send({ code: "NOT_FOUND", message: "Recording not found" });
+
+    const root = resolve(options.storagePath);
+    const file = resolve(root, recording.filePath);
+    if (!file.startsWith(`${root}${sep}`))
+      return reply
+        .code(400)
+        .send({ code: "INVALID_PATH", message: "Invalid recording path" });
+
+    try {
+      const metadata = await stat(file);
+      if (!metadata.isFile()) throw new Error("not a file");
+    } catch {
+      return reply.code(404).send({
+        code: "FILE_NOT_FOUND",
+        message: "Recording file is unavailable",
+      });
+    }
+
+    const ffmpeg = spawn(
+      "ffmpeg",
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-ss",
+        "0.5",
+        "-i",
+        file,
+        "-frames:v",
+        "1",
+        "-vf",
+        "scale=640:-2",
+        "-q:v",
+        "4",
+        "-f",
+        "image2pipe",
+        "-vcodec",
+        "mjpeg",
+        "pipe:1",
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+
+    let diagnostic = "";
+    ffmpeg.stderr.setEncoding("utf8");
+    ffmpeg.stderr.on("data", (chunk: string) => {
+      if (diagnostic.length < 4096) diagnostic += chunk;
+    });
+    ffmpeg.on("error", (error) => {
+      app.log.warn(
+        { error, recordingId: parsed.data },
+        "thumbnail ffmpeg failed",
+      );
+    });
+    ffmpeg.on("close", (code) => {
+      if (code !== 0) {
+        app.log.warn(
+          { code, recordingId: parsed.data, diagnostic: diagnostic.trim() },
+          "thumbnail extraction failed",
+        );
+      }
+    });
+
+    reply
+      .header("Content-Type", "image/jpeg")
+      .header("Cache-Control", "public, max-age=604800, immutable");
+    return await reply.send(ffmpeg.stdout);
   });
   app.get("/:id/media", async (request, reply) => {
     const parsed = recordingId.safeParse((request.params as { id: string }).id);
