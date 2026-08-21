@@ -1,4 +1,9 @@
-import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
+import type {
+  FastifyInstance,
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyRequest,
+} from "fastify";
 import { z } from "zod";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -23,7 +28,9 @@ async function resolveRecordingFile(
   const root = resolve(storagePath);
   const file = resolve(root, filePath);
   if (!file.startsWith(`${root}${sep}`)) {
-    await reply.code(400).send({ code: "INVALID_PATH", message: "Invalid recording path" });
+    await reply
+      .code(400)
+      .send({ code: "INVALID_PATH", message: "Invalid recording path" });
     return undefined;
   }
   return file;
@@ -105,15 +112,17 @@ async function sendRecordingMedia(
     try {
       range = parseByteRange(request.headers.range, metadata.size);
     } catch {
-      return reply
+      return await reply
         .code(416)
         .header("Content-Range", `bytes */${String(metadata.size)}`)
         .send();
     }
-    reply.header("Accept-Ranges", "bytes").header(
-      "Content-Type",
-      container === "mp4" ? "video/mp4" : "application/octet-stream",
-    );
+    reply
+      .header("Accept-Ranges", "bytes")
+      .header(
+        "Content-Type",
+        container === "mp4" ? "video/mp4" : "application/octet-stream",
+      );
     if (range) {
       reply
         .code(206)
@@ -122,10 +131,10 @@ async function sendRecordingMedia(
           `bytes ${String(range.start)}-${String(range.end)}/${String(metadata.size)}`,
         )
         .header("Content-Length", String(range.end - range.start + 1));
-      return reply.send(createReadStream(file, range));
+      return await reply.send(createReadStream(file, range));
     }
     reply.header("Content-Length", String(metadata.size));
-    return reply.send(createReadStream(file));
+    return await reply.send(createReadStream(file));
   } catch {
     return reply.code(404).send({
       code: "FILE_NOT_FOUND",
@@ -214,9 +223,13 @@ export const recordingRoutes: FastifyPluginAsync<{
 
     // const root = resolve(options.storagePath);
     // const file = resolve(root, recording.filePath);
-    const file = await resolveRecordingFile(reply,options.storagePath,recording.filePath);
-    if(!file) return;
-    return sendThumbnail(app,reply,file, parsed.data)
+    const file = await resolveRecordingFile(
+      reply,
+      options.storagePath,
+      recording.filePath,
+    );
+    if (!file) return;
+    return sendThumbnail(app, reply, file, parsed.data);
     // if (!file.startsWith(`${root}${sep}`))
     //   return reply
     //     .code(400)
@@ -297,10 +310,14 @@ export const recordingRoutes: FastifyPluginAsync<{
 
     // const root = resolve(options.storagePath);
     // const file = resolve(root, recording.filePath);
-    const file = await resolveRecordingFile(reply, options.storagePath,recording.filePath);
-    if(!file) return;
-    return sendRecordingMedia(request,reply,file,recording.container);
-    
+    const file = await resolveRecordingFile(
+      reply,
+      options.storagePath,
+      recording.filePath,
+    );
+    if (!file) return;
+    return sendRecordingMedia(request, reply, file, recording.container);
+
     // if (!file.startsWith(`${root}${sep}`))
     //   return reply
     //     .code(400)
