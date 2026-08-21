@@ -139,7 +139,7 @@ impl MotionEventRecorder {
         inputs.push(event_clip.clone());
 
         let (target, start, used_prebuffer) = if inputs.len() == 1 {
-            move_event_clip(&event_clip, &requested_target).await?;
+            normalize_single_clip(&event_clip, &requested_target, &self.work_dir).await?;
             (requested_target, self.event_started_at, false)
         } else {
             match concat_mp4s(&inputs, &requested_target, &self.work_dir).await {
@@ -159,7 +159,7 @@ impl MotionEventRecorder {
                             .await
                             .map_err(|mkdir_error| mkdir_error.to_string())?;
                     }
-                    move_event_clip(&event_clip, &fallback).await?;
+                    normalize_single_clip(&event_clip, &fallback, &self.work_dir).await?;
                     (fallback, self.event_started_at, false)
                 }
             }
@@ -213,19 +213,18 @@ impl MotionEventRecorder {
     }
 }
 
-async fn move_event_clip(source: &Path, target: &Path) -> Result<(), String> {
-    if fs::try_exists(target).await.unwrap_or(false) {
-        fs::remove_file(target)
-            .await
-            .map_err(|error| error.to_string())?;
-    }
-    fs::rename(source, target)
+async fn normalize_single_clip(source: &Path, target: &Path, work_dir: &Path) -> Result<(), String> {
+    let frame_rate = probe_nominal_frame_rate(source)
         .await
-        .map_err(|error| error.to_string())
+        .ok_or_else(|| "unable to determine motion recording frame rate".to_string())?;
+    normalize_timestamps(source, target, work_dir, frame_rate).await
 }
 
 async fn concat_mp4s(inputs: &[PathBuf], target: &Path, work_dir: &Path) -> Result<(), String> {
     let list_path = work_dir.join("concat.txt");
+    let joined_path = work_dir.join("joined.mp4");
+    let _ = fs::remove_file(&joined_path).await;
+
     let mut list = String::new();
     for path in inputs {
         let escaped = path
@@ -238,8 +237,6 @@ async fn concat_mp4s(inputs: &[PathBuf], target: &Path, work_dir: &Path) -> Resu
         .await
         .map_err(|error| error.to_string())?;
 
-    let temp_target = target.with_extension("mp4.partial");
-    let _ = fs::remove_file(&temp_target).await;
     let output = Command::new("ffmpeg")
         .args([
             "-hide_banner",
@@ -253,7 +250,7 @@ async fn concat_mp4s(inputs: &[PathBuf], target: &Path, work_dir: &Path) -> Resu
         ])
         .arg(&list_path)
         .args(["-c", "copy", "-movflags", "+faststart", "-f", "mp4"])
-        .arg(&temp_target)
+        .arg(&joined_path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -261,9 +258,83 @@ async fn concat_mp4s(inputs: &[PathBuf], target: &Path, work_dir: &Path) -> Resu
         .await
         .map_err(|error| error.to_string())?;
     if !output.status.success() {
-        let _ = fs::remove_file(&temp_target).await;
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
+
+    let frame_rate = match probe_nominal_frame_rate(&joined_path).await {
+        Some(rate) => rate,
+        None => probe_nominal_frame_rate(&inputs[0])
+            .await
+            .ok_or_else(|| "unable to determine motion recording frame rate".to_string())?,
+    };
+
+    normalize_timestamps(&joined_path, target, work_dir, frame_rate).await
+}
+
+async fn normalize_timestamps(
+    source: &Path,
+    target: &Path,
+    work_dir: &Path,
+    frame_rate: f64,
+) -> Result<(), String> {
+    if !frame_rate.is_finite() || !(1.0..=120.0).contains(&frame_rate) {
+        return Err(format!("invalid nominal frame rate {frame_rate}"));
+    }
+
+    let temp_target = work_dir.join("normalized.mp4");
+    let _ = fs::remove_file(&temp_target).await;
+    let setpts = format!("setpts=N/({frame_rate:.6}*TB)");
+
+    let output = Command::new("ffmpeg")
+        .args(["-hide_banner", "-loglevel", "warning", "-i"])
+        .arg(source)
+        .args([
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a?",
+            "-vf",
+        ])
+        .arg(setpts)
+        .args([
+            "-af",
+            "asetpts=PTS-STARTPTS",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "20",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "64k",
+            "-movflags",
+            "+faststart",
+            "-f",
+            "mp4",
+        ])
+        .arg(&temp_target)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        let _ = fs::remove_file(&temp_target).await;
+        return Err(format!(
+            "timestamp normalization failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
+    if probe_duration_ms(&temp_target).await.is_none() {
+        let _ = fs::remove_file(&temp_target).await;
+        return Err("timestamp-normalized recording is not a playable MP4".to_string());
+    }
+
     if fs::try_exists(target).await.unwrap_or(false) {
         fs::remove_file(target)
             .await
@@ -273,6 +344,41 @@ async fn concat_mp4s(inputs: &[PathBuf], target: &Path, work_dir: &Path) -> Resu
         .await
         .map_err(|error| error.to_string())?;
     Ok(())
+}
+
+async fn probe_nominal_frame_rate(path: &Path) -> Option<f64> {
+    let output = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=r_frame_rate",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+        ])
+        .arg(path)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .await
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_frame_rate(String::from_utf8(output.stdout).ok()?.trim())
+}
+
+fn parse_frame_rate(value: &str) -> Option<f64> {
+    let (numerator, denominator) = value.split_once('/')?;
+    let numerator: f64 = numerator.parse().ok()?;
+    let denominator: f64 = denominator.parse().ok()?;
+    if denominator == 0.0 {
+        return None;
+    }
+    let rate = numerator / denominator;
+    (rate.is_finite() && (1.0..=120.0).contains(&rate)).then_some(rate)
 }
 
 async fn probe_duration_ms(path: &Path) -> Option<i64> {
@@ -297,4 +403,22 @@ async fn probe_duration_ms(path: &Path) -> Option<i64> {
     let seconds: f64 = String::from_utf8(output.stdout).ok()?.trim().parse().ok()?;
     let milliseconds = (seconds * 1000.0).round() as i64;
     (milliseconds > 0).then_some(milliseconds)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_frame_rate;
+
+    #[test]
+    fn parses_fractional_frame_rate() {
+        assert_eq!(parse_frame_rate("25/2"), Some(12.5));
+        assert_eq!(parse_frame_rate("25/1"), Some(25.0));
+    }
+
+    #[test]
+    fn rejects_invalid_frame_rate() {
+        assert_eq!(parse_frame_rate("0/0"), None);
+        assert_eq!(parse_frame_rate("1000/1"), None);
+        assert_eq!(parse_frame_rate("bad"), None);
+    }
 }
