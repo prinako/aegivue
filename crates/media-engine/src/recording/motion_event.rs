@@ -213,7 +213,11 @@ impl MotionEventRecorder {
     }
 }
 
-async fn normalize_single_clip(source: &Path, target: &Path, work_dir: &Path) -> Result<(), String> {
+async fn normalize_single_clip(
+    source: &Path,
+    target: &Path,
+    work_dir: &Path,
+) -> Result<(), String> {
     let frame_rate = probe_nominal_frame_rate(source)
         .await
         .ok_or_else(|| "unable to determine motion recording frame rate".to_string())?;
@@ -288,13 +292,7 @@ async fn normalize_timestamps(
     let output = Command::new("ffmpeg")
         .args(["-hide_banner", "-loglevel", "warning", "-i"])
         .arg(source)
-        .args([
-            "-map",
-            "0:v:0",
-            "-map",
-            "0:a?",
-            "-vf",
-        ])
+        .args(["-map", "0:v:0", "-map", "0:a?", "-vf"])
         .arg(setpts)
         .args([
             "-af",
