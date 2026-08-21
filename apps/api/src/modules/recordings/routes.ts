@@ -141,7 +141,10 @@ export const recordingRoutes: FastifyPluginAsync<{
       if (diagnostic.length < 4096) diagnostic += chunk;
     });
     ffmpeg.on("error", (error) => {
-      app.log.warn({ error, recordingId: parsed.data }, "thumbnail ffmpeg failed");
+      app.log.warn(
+        { error, recordingId: parsed.data },
+        "thumbnail ffmpeg failed",
+      );
     });
     ffmpeg.on("close", (code) => {
       if (code !== 0) {
