@@ -261,10 +261,12 @@ async fn concat_mp4s(inputs: &[PathBuf], target: &Path, work_dir: &Path) -> Resu
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
 
-    let frame_rate = probe_nominal_frame_rate(&joined_path)
-        .await
-        .or_else(|| futures::executor::block_on(probe_nominal_frame_rate(&inputs[0])))
-        .ok_or_else(|| "unable to determine motion recording frame rate".to_string())?;
+    let frame_rate = match probe_nominal_frame_rate(&joined_path).await {
+        Some(rate) => rate,
+        None => probe_nominal_frame_rate(&inputs[0])
+            .await
+            .ok_or_else(|| "unable to determine motion recording frame rate".to_string())?,
+    };
 
     normalize_timestamps(&joined_path, target, work_dir, frame_rate).await
 }
