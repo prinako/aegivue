@@ -13,7 +13,7 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
-RUN apk add --no-cache su-exec \
+RUN apk add --no-cache su-exec ffmpeg \
     && deluser node \
     && addgroup -g 1000 aegivue \
     && adduser -D -H -u 1000 -G aegivue aegivue \
