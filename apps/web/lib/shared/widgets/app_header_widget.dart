@@ -5,12 +5,12 @@ class AppHeaderWidget extends StatelessWidget {
     super.key,
     required this.title,
     required this.onRefresh,
-    required this.onAdd,
+    this.onAdd,
   });
 
   final String title;
   final Future<void> Function() onRefresh;
-  final VoidCallback onAdd;
+  final VoidCallback? onAdd;
 
   @override
   Widget build(BuildContext context) {
@@ -47,12 +47,14 @@ class AppHeaderWidget extends StatelessWidget {
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh_rounded),
           ),
-          const SizedBox(width: 8),
-          FilledButton.icon(
-            onPressed: onAdd,
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Add camera'),
-          ),
+          if (onAdd != null) ...[
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add camera'),
+            ),
+          ],
         ],
       ),
     );

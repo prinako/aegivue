@@ -1,7 +1,7 @@
 import 'package:aegivue/core/theme/app_colors.dart';
 import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:aegivue/features/cameras/presentation/widgets/camera_card.dart';
-import 'package:aegivue/features/dashboard/dashboard_controller.dart';
+import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_list_widget.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_player.dart';
 import 'package:aegivue/shared/widgets/section_title_widget.dart';
@@ -10,23 +10,25 @@ import 'package:flutter/material.dart';
 class DashboardOverview extends StatelessWidget {
   const DashboardOverview({
     super.key,
-    required this.data,
+    required this.cameras,
+    required this.recordings,
     required this.onAdd,
     required this.onEdit,
     required this.onRefresh,
   });
 
-  final DashboardData data;
+  final List<Camera> cameras;
+  final List<Recording> recordings;
   final VoidCallback onAdd;
   final ValueChanged<Camera> onEdit;
   final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    final online = data.cameras
+    final online = cameras
         .where((camera) => camera.runtimeState == 'online')
         .length;
-    final recording = data.cameras
+    final recording = cameras
         .where((camera) => camera.recording.enabled)
         .length;
 
@@ -36,7 +38,7 @@ class DashboardOverview extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 44),
         children: [
-          _DashboardHero(online: online, total: data.cameras.length),
+          _DashboardHero(online: online, total: cameras.length),
           const SizedBox(height: 18),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -55,7 +57,7 @@ class DashboardOverview extends StatelessWidget {
                     width: width,
                     icon: Icons.videocam_outlined,
                     label: 'Cameras',
-                    value: '${data.cameras.length}',
+                    value: '${cameras.length}',
                   ),
                   _DashboardMetric(
                     width: width,
@@ -73,7 +75,7 @@ class DashboardOverview extends StatelessWidget {
                     width: width,
                     icon: Icons.video_file_outlined,
                     label: 'Clips',
-                    value: '${data.recordings.length}',
+                    value: '${recordings.length}',
                   ),
                 ],
               );
@@ -86,7 +88,7 @@ class DashboardOverview extends StatelessWidget {
             action: onAdd,
           ),
           const SizedBox(height: 12),
-          if (data.cameras.isEmpty)
+          if (cameras.isEmpty)
             _EmptyCameras(onAdd: onAdd)
           else
             LayoutBuilder(
@@ -99,7 +101,7 @@ class DashboardOverview extends StatelessWidget {
                 return GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: data.cameras.length,
+                  itemCount: cameras.length,
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: columns,
                     crossAxisSpacing: 14,
@@ -107,7 +109,7 @@ class DashboardOverview extends StatelessWidget {
                     childAspectRatio: columns == 1 ? 1.75 : 1.35,
                   ),
                   itemBuilder: (context, index) {
-                    final camera = data.cameras[index];
+                    final camera = cameras[index];
                     return CameraCard(
                       camera: camera,
                       onTap: () => onEdit(camera),
@@ -123,7 +125,7 @@ class DashboardOverview extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           RecordingListWidget(
-            recordings: data.recordings.take(6).toList(),
+            recordings: recordings.take(6).toList(),
             onOpen: (recording) => showDialog<void>(
               context: context,
               builder: (dialogContext) => Dialog(
