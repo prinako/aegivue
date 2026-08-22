@@ -1,7 +1,7 @@
-name: aegivue
 services:
   aegivue-postgres:
     image: postgres:17-alpine
+    container_name: aegivue-postgres
     environment:
       POSTGRES_DB: aegivue
       POSTGRES_USER: aegivue
@@ -12,6 +12,7 @@ services:
 
   aegivue-migrate:
     image: postgres:17-alpine
+    container_name: aegivue-migrate
     depends_on: {aegivue-postgres: {condition: service_healthy}}
     environment:
       AEGIVUE_DATABASE_URL: postgres://aegivue:${AEGIVUE_POSTGRES_PASSWORD}@aegivue-postgres:5432/aegivue
@@ -21,6 +22,7 @@ services:
 
   aegivue-api:
     image: ghcr.io/prinako/aegivue-api:${AEGIVUE_IMAGE_TAG:-latest}
+    container_name: aegivue-api
     pull_policy: always
     depends_on: {aegivue-migrate: {condition: service_completed_successfully}}
     environment:
@@ -41,6 +43,7 @@ services:
 
   aegivue-webrtc:
     image: bluenviron/mediamtx:1.19.3
+    container_name: aegivue-webrtc
     restart: unless-stopped
     environment:
       MTX_LOGLEVEL: ${AEGIVUE_LOG_LEVEL:-info}
@@ -56,6 +59,7 @@ services:
 
   aegivue-media:
     image: ghcr.io/prinako/aegivue-media:${AEGIVUE_IMAGE_TAG:-latest}
+    container_name: aegivue-media
     pull_policy: always
     depends_on:
       aegivue-migrate: {condition: service_completed_successfully}
@@ -76,6 +80,7 @@ services:
 
   aegivue-web:
     image: ghcr.io/prinako/aegivue-web:${AEGIVUE_IMAGE_TAG:-latest}
+    container_name: aegivue-web
     pull_policy: always
     depends_on:
       aegivue-api: {condition: service_healthy}

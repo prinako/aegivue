@@ -1,16 +1,97 @@
+name: aegivue
+
 services:
   aegivue-postgres:
-    ports: ["127.0.0.1:5432:5432"]
+    extends:
+      file: docker-compose.yml
+      service: aegivue-postgres
+    ports:
+      - "${AEGIVUE_POSTGRES_BIND:-127.0.0.1}:${AEGIVUE_POSTGRES_PORT:-5432}:5432"
+
+  aegivue-migrate:
+    extends:
+      file: docker-compose.yml
+      service: aegivue-migrate
+
   aegivue-api:
+    extends:
+      file: docker-compose.yml
+      service: aegivue-api
     build:
       context: ./apps/api
-      target: build
-    command: ["npm","run","dev"]
-    volumes: [./apps/api/src:/src/src:ro]
+      target: dev
+    pull_policy: build
+    init: true
+    command: ["npm", "run", "dev"]
+    volumes:
+      - type: bind
+        source: ./apps/api/src
+        target: /src/src
+        read_only: true
+    develop:
+      watch:
+        - action: rebuild
+          path: ./apps/api/package.json
+        - action: rebuild
+          path: ./apps/api/tsconfig.json
+
   aegivue-media:
+    extends:
+      file: docker-compose.yml
+      service: aegivue-media
     build:
       context: .
       dockerfile: crates/media-engine/Dockerfile
+    pull_policy: build
+    init: true
+    develop:
+      watch:
+        - action: rebuild
+          path: ./Cargo.toml
+        - action: rebuild
+          path: ./Cargo.lock
+        - action: rebuild
+          path: ./crates
+
+  aegivue-webrtc:
+    extends:
+      file: docker-compose.yml
+      service: aegivue-webrtc
+    ports:
+      - "${AEGIVUE_RTSP_BIND:-127.0.0.1}:${AEGIVUE_RTSP_PORT:-8554}:8554"
+      - "${AEGIVUE_HLS_BIND:-127.0.0.1}:${AEGIVUE_HLS_PORT:-8888}:8888"
+      - "${AEGIVUE_WHEP_BIND:-127.0.0.1}:${AEGIVUE_WHEP_PORT:-8889}:8889"
+
   aegivue-web:
+    extends:
+      file: docker-compose.yml
+      service: aegivue-web
     build:
       context: ./apps/web
+    pull_policy: build
+    develop:
+      watch:
+        - action: rebuild
+          path: ./apps/web/pubspec.yaml
+        - action: rebuild
+          path: ./apps/web/pubspec.lock
+        - action: rebuild
+          path: ./apps/web/lib
+        - action: rebuild
+          path: ./apps/web/web
+        - action: rebuild
+          path: ./apps/web/assets
+        - action: rebuild
+          path: ./apps/web/nginx.conf
+
+networks:
+  aegivue-internal:
+    internal: true
+  aegivue-public: {}
+  aegivue-cameras: {}
+  aegivue-stream:
+    internal: true
+
+volumes:
+  aegivue-postgres-data: {}
+  aegivue-recordings: {}
