@@ -4,8 +4,8 @@
 
 # Aegivue
 
-**A self-hosted network video recorder for reliable RTSP capture, low-latency
-live viewing, and motion-aware recording.**
+**A self-hosted network video recorder for dependable RTSP capture, low-latency
+live viewing, and motion-aware recording—with your footage kept on your hardware.**
 
 [![CI](https://github.com/prinako/aegivue/actions/workflows/ci.yml/badge.svg)](https://github.com/prinako/aegivue/actions/workflows/ci.yml)
 [![Docker](https://github.com/prinako/aegivue/actions/workflows/docker.yml/badge.svg)](https://github.com/prinako/aegivue/actions/workflows/docker.yml)
@@ -13,8 +13,8 @@ live viewing, and motion-aware recording.**
 [![Flutter 3.38.7](https://img.shields.io/badge/Flutter-3.38.7-02569B?logo=flutter)](https://flutter.dev/)
 [![Rust](https://img.shields.io/badge/media-Rust-000000?logo=rust)](https://www.rust-lang.org/)
 
-[Quick start](#quick-start) · [Features](#features) · [Architecture](#architecture) ·
-[Documentation](#documentation) · [Development](#development) · [Roadmap](#roadmap)
+[Quick start](#quick-start) · [Capabilities](#capabilities) · [Architecture](#architecture) ·
+[Documentation](#documentation) · [Development](#development) · [Security](#security)
 
 </div>
 
@@ -23,13 +23,18 @@ live viewing, and motion-aware recording.**
 > authentication. Use it on a trusted network or behind an authenticated reverse
 > proxy. Do not expose the dashboard or API directly to the public internet.
 
-Aegivue keeps video on infrastructure you control. A Rust media engine isolates
-camera and FFmpeg workloads, a Fastify API manages configuration and metadata,
-MediaMTX delivers browser-friendly live streams, and Flutter provides the control
-surface. PostgreSQL stores searchable state while finalized media remains on a
-dedicated recording volume.
+Aegivue is a privacy-first NVR for home labs and private networks. It records
+compatible RTSP cameras without mandatory video transcoding, serves live video
+through WebRTC or Low-Latency HLS, and provides a responsive browser dashboard
+for cameras, recordings, and motion events.
 
-## Why Aegivue?
+The system deliberately separates media processing from its control plane: a
+Rust engine supervises camera and FFmpeg workloads, a Fastify API manages
+configuration and metadata, MediaMTX handles browser-friendly live delivery, and
+Flutter provides the user interface. PostgreSQL stores searchable state while
+finalized media remains on a dedicated recording volume.
+
+## Why Aegivue
 
 - **Failure isolation:** each camera runs in a supervised worker, so one unreliable
   stream does not take down the rest of the system.
@@ -41,10 +46,10 @@ dedicated recording volume.
   configurable post-event capture, and event-to-recording linkage.
 - **Local ownership:** recordings and operational metadata stay in your Docker
   volumes or mounted storage.
-- **Open interfaces:** camera control, recordings, events, health, and media are
-  exposed through a documented REST API.
+- **Operational visibility:** health checks, structured logs, runtime camera
+  status, and an OpenAPI-described REST API make the system inspectable.
 
-## Features
+## Capabilities
 
 | Area | Capabilities |
 | --- | --- |
@@ -54,6 +59,7 @@ dedicated recording volume.
 | Retention | Per-camera retention, protected recordings, automatic file and metadata cleanup |
 | Live view | WebRTC, LL-HLS fallback, substream preference, adaptive camera grid, focused viewer |
 | Motion | Supervised frame-difference detector, configurable stream/FPS/sensitivity, persisted events |
+| Operations | Health checks, structured logs, runtime status, and documented REST endpoints |
 | Platform | Flutter web UI, Fastify/OpenAPI control plane, Rust/Tokio media engine, PostgreSQL |
 | Deployment | Docker Compose, private service networks, health checks, prebuilt GHCR images |
 
@@ -63,10 +69,10 @@ support varies across browsers and operating systems.
 
 ## Project status
 
-Aegivue is an **early-stage HomeLab NVR** with a working end-to-end foundation.
-Core camera management, continuous recording, live viewing, retention, motion
-events, and motion-triggered capture are implemented. Security hardening, advanced
-detection, and broader hardware validation remain in progress.
+Aegivue is **early-stage software** intended for home-lab evaluation and trusted
+private networks. The core path—camera management, recording, playback, live
+viewing, retention, and motion events—is implemented. Authentication, encrypted
+secret storage, advanced detection, and broad hardware validation are not.
 
 | Status | Area |
 | --- | --- |
@@ -74,7 +80,7 @@ detection, and broader hardware validation remain in progress.
 | ✅ Available | Continuous recording and indexed playback |
 | ✅ Available | WebRTC live view with LL-HLS fallback |
 | ✅ Available | Retention and expiry cleanup |
-| 🧪 Foundation | Motion detection, event timeline, and triggered recording |
+| 🧪 Experimental | Motion detection, event timeline, and triggered recording |
 | 🚧 Planned | Authentication, authorization, and encrypted secret storage |
 | 🚧 Planned | Motion zones, AI detection, and notifications |
 
@@ -84,9 +90,12 @@ See the [roadmap](#roadmap) for current priorities.
 
 ### Requirements
 
-- Docker Engine
-- Docker Compose v2
-- An RTSP camera reachable from the Docker host, optional for initial startup
+| Requirement | Notes |
+| --- | --- |
+| Docker Engine | A current Linux installation is the documented deployment target |
+| Docker Compose | Compose v2 (`docker compose`) |
+| Host resources | Capacity depends on camera count, bitrate, segment length, and retention |
+| RTSP camera | Optional for startup; must be reachable from the Docker host to capture video |
 
 ### 1. Configure
 
@@ -99,6 +108,10 @@ cp .env.example .env
 Set a long, random `AEGIVUE_POSTGRES_PASSWORD` in `.env`. If another device will
 open live video, also set `AEGIVUE_WEBRTC_HOST` to the Aegivue host's reachable LAN
 address or DNS name.
+
+The default bindings expose the dashboard and API only on the Docker host. Keep
+them private unless you have placed an authenticated reverse proxy in front of
+the deployment.
 
 Validate the effective configuration:
 
@@ -220,6 +233,8 @@ All application endpoints are rooted at `/api/v1`.
 | `/events` | Paginate and filter events or read an individual event |
 
 Camera passwords and internal storage paths are omitted from API read models.
+The interactive OpenAPI UI at `/docs` is the authoritative endpoint reference
+for the version currently running.
 
 ## Configuration
 
@@ -324,6 +339,10 @@ Roadmap items describe intent, not a release commitment.
 Issues and pull requests are welcome. Keep changes focused, update documentation
 with behavior or configuration changes, and run the relevant checks from
 [Development](#development) before submitting a pull request.
+
+When reporting a bug, include the Aegivue image tag or commit, host platform,
+camera codec, relevant sanitized logs, and a minimal reproduction. Never include
+camera credentials or credential-bearing RTSP URLs.
 
 ## License
 
