@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
 class LiveCameraView extends StatelessWidget {
+  static const id = 'live';
   const LiveCameraView({
     super.key,
     required this.cameraId,

@@ -4,6 +4,7 @@ import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:flutter/material.dart';
 
 class CameraSettingsPage extends StatefulWidget {
+  static const id = 'cameras-sttings';
   const CameraSettingsPage({super.key, required this.repository, this.camera});
 
   final CameraRepository repository;

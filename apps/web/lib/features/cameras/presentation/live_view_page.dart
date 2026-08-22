@@ -6,6 +6,7 @@ import 'package:aegivue/features/cameras/presentation/live_camera_view.dart';
 import 'package:flutter/material.dart';
 
 class LiveViewPage extends StatelessWidget {
+  static const id = 'live-view';
   const LiveViewPage({
     super.key,
     required this.cameras,

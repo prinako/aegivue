@@ -7,6 +7,8 @@ environment:
 dependencies:
   dio: ^5.11.0
   flutter: {sdk: flutter}
+  flutter_web_plugins: {sdk: flutter}
+  go_router: 16.2.1
   provider: ^6.1.5+1
   web: ^1.1.0
 dev_dependencies:
