@@ -15,15 +15,9 @@ class App extends StatelessWidget {
     final api = ApiClient();
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(
-          create: (_) => CameraController(api)..load(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => RecordingController(api)..load(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => EventController(api)..load(),
-        ),
+        ChangeNotifierProvider(create: (_) => CameraController(api)..load()),
+        ChangeNotifierProvider(create: (_) => RecordingController(api)..load()),
+        ChangeNotifierProvider(create: (_) => EventController(api)..load()),
       ],
       child: MaterialApp.router(
         title: 'Aegivue',

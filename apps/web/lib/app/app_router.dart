@@ -30,9 +30,7 @@ final GoRouter appRouter = GoRouter(
         final cameras = context.watch<CameraController>();
         final camera = cameras.findById(state.pathParameters['id']!);
         if (camera == null) {
-          return const Scaffold(
-            body: Center(child: Text('Camera not found')),
-          );
+          return const Scaffold(body: Center(child: Text('Camera not found')));
         }
         return CameraSettingsPage(
           repository: cameras.repository,
