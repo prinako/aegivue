@@ -2,6 +2,7 @@ import 'package:aegivue/features/events/domain/event.dart';
 import 'package:flutter/material.dart';
 
 class MotionEventsPage extends StatefulWidget {
+  static const id = '/motion-events';
   const MotionEventsPage({
     super.key,
     required this.events,
