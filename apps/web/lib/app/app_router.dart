@@ -1,6 +1,7 @@
 import 'package:aegivue/features/cameras/camera_controller.dart';
 import 'package:aegivue/features/cameras/presentation/camera_settings_page.dart';
 import 'package:aegivue/features/dashboard/presentation/dashboard_page.dart';
+import 'package:aegivue/features/dashboard/presentation/dashboard_section_pages.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -8,19 +9,41 @@ import 'package:provider/provider.dart';
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
   routes: [
-    GoRoute(path: '/', builder: (_, __) => const DashboardPage(section: 0)),
-    GoRoute(path: '/live', builder: (_, __) => const DashboardPage(section: 1)),
-    GoRoute(
-      path: '/recordings',
-      builder: (_, __) => const DashboardPage(section: 2),
-    ),
-    GoRoute(
-      path: '/events',
-      builder: (_, __) => const DashboardPage(section: 3),
+    StatefulShellRoute.indexedStack(
+      builder: (_, _, navigationShell) =>
+          DashboardPage(navigationShell: navigationShell),
+      branches: [
+        StatefulShellBranch(
+          routes: [
+            GoRoute(path: '/', builder: (_, _) => const OverviewSectionPage()),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(path: '/live', builder: (_, _) => const LiveSectionPage()),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/recordings',
+              builder: (_, _) => const RecordingsSectionPage(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/events',
+              builder: (_, _) => const EventsSectionPage(),
+            ),
+          ],
+        ),
+      ],
     ),
     GoRoute(
       path: '/cameras/new',
-      builder: (context, state) => CameraSettingsPage(
+      builder: (context, _) => CameraSettingsPage(
         repository: context.read<CameraController>().repository,
       ),
     ),
@@ -40,10 +63,3 @@ final GoRouter appRouter = GoRouter(
     ),
   ],
 );
-
-String pathForSection(int section) => switch (section) {
-  1 => '/live',
-  2 => '/recordings',
-  3 => '/events',
-  _ => '/',
-};
