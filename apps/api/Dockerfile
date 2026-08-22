@@ -1,9 +1,14 @@
-FROM node:22-alpine AS build
+FROM node:22-alpine AS dependencies
 WORKDIR /src
 COPY package.json ./
 RUN npm install
+
+FROM dependencies AS dev
 COPY tsconfig.json ./
 COPY src ./src
+CMD ["npm", "run", "dev"]
+
+FROM dev AS build
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22-alpine
