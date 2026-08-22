@@ -1,4 +1,9 @@
-import type { FastifyPluginAsync } from "fastify";
+import type {
+  FastifyInstance,
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyRequest,
+} from "fastify";
 import { z } from "zod";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -14,6 +19,129 @@ const recordingId = z.string().uuid();
 const expiryUpdate = z.object({
   expiresAt: z.string().datetime().nullable(),
 });
+
+async function resolveRecordingFile(
+  reply: FastifyReply,
+  storagePath: string,
+  filePath: string,
+): Promise<string | undefined> {
+  const root = resolve(storagePath);
+  const file = resolve(root, filePath);
+  if (!file.startsWith(`${root}${sep}`)) {
+    await reply
+      .code(400)
+      .send({ code: "INVALID_PATH", message: "Invalid recording path" });
+    return undefined;
+  }
+  return file;
+}
+
+async function sendThumbnail(
+  app: FastifyInstance,
+  reply: FastifyReply,
+  file: string,
+  id: string,
+) {
+  // move the existing ffmpeg spawn + stderr/close handlers here
+  try {
+    const metadata = await stat(file);
+    if (!metadata.isFile()) throw new Error("not a file");
+  } catch {
+    return reply.code(404).send({
+      code: "FILE_NOT_FOUND",
+      message: "Recording file is unavailable",
+    });
+  }
+  const ffmpeg = spawn(
+    "ffmpeg",
+    [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-ss",
+      "0.5",
+      "-i",
+      file,
+      "-frames:v",
+      "1",
+      "-vf",
+      "scale=640:-2",
+      "-q:v",
+      "4",
+      "-f",
+      "image2pipe",
+      "-vcodec",
+      "mjpeg",
+      "pipe:1",
+    ],
+    { stdio: ["ignore", "pipe", "pipe"] },
+  );
+  let diagnostic = "";
+  ffmpeg.stderr.setEncoding("utf8");
+  ffmpeg.stderr.on("data", (chunk: string) => {
+    if (diagnostic.length < 4096) diagnostic += chunk;
+  });
+  ffmpeg.on("error", (error) => {
+    app.log.warn({ error, recordingId: id }, "thumbnail ffmpeg failed");
+  });
+  ffmpeg.on("close", (code) => {
+    if (code !== 0) {
+      app.log.warn(
+        { code, recordingId: id, diagnostic: diagnostic.trim() },
+        "thumbnail extraction failed",
+      );
+    }
+  });
+  reply
+    .header("Content-Type", "image/jpeg")
+    .header("Cache-Control", "public, max-age=604800, immutable");
+  return reply.send(ffmpeg.stdout);
+}
+
+async function sendRecordingMedia(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  file: string,
+  container: string,
+) {
+  // move the existing stat / parseByteRange / 206 vs full-file send here
+  try {
+    const metadata = await stat(file);
+    if (!metadata.isFile()) throw new Error("not a file");
+    let range: { start: number; end: number } | null;
+    try {
+      range = parseByteRange(request.headers.range, metadata.size);
+    } catch {
+      return await reply
+        .code(416)
+        .header("Content-Range", `bytes */${String(metadata.size)}`)
+        .send();
+    }
+    reply
+      .header("Accept-Ranges", "bytes")
+      .header(
+        "Content-Type",
+        container === "mp4" ? "video/mp4" : "application/octet-stream",
+      );
+    if (range) {
+      reply
+        .code(206)
+        .header(
+          "Content-Range",
+          `bytes ${String(range.start)}-${String(range.end)}/${String(metadata.size)}`,
+        )
+        .header("Content-Length", String(range.end - range.start + 1));
+      return await reply.send(createReadStream(file, range));
+    }
+    reply.header("Content-Length", String(metadata.size));
+    return await reply.send(createReadStream(file));
+  } catch {
+    return reply.code(404).send({
+      code: "FILE_NOT_FOUND",
+      message: "Recording file is unavailable",
+    });
+  }
+}
 
 export const recordingRoutes: FastifyPluginAsync<{
   storagePath: string;
@@ -93,73 +221,17 @@ export const recordingRoutes: FastifyPluginAsync<{
         .code(404)
         .send({ code: "NOT_FOUND", message: "Recording not found" });
 
-    const root = resolve(options.storagePath);
-    const file = resolve(root, recording.filePath);
-    if (!file.startsWith(`${root}${sep}`))
-      return reply
-        .code(400)
-        .send({ code: "INVALID_PATH", message: "Invalid recording path" });
-
-    try {
-      const metadata = await stat(file);
-      if (!metadata.isFile()) throw new Error("not a file");
-    } catch {
-      return reply.code(404).send({
-        code: "FILE_NOT_FOUND",
-        message: "Recording file is unavailable",
-      });
-    }
-
-    const ffmpeg = spawn(
-      "ffmpeg",
-      [
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-ss",
-        "0.5",
-        "-i",
-        file,
-        "-frames:v",
-        "1",
-        "-vf",
-        "scale=640:-2",
-        "-q:v",
-        "4",
-        "-f",
-        "image2pipe",
-        "-vcodec",
-        "mjpeg",
-        "pipe:1",
-      ],
-      { stdio: ["ignore", "pipe", "pipe"] },
+    // const root = resolve(options.storagePath);
+    // const file = resolve(root, recording.filePath);
+    const file = await resolveRecordingFile(
+      reply,
+      options.storagePath,
+      recording.filePath,
     );
-
-    let diagnostic = "";
-    ffmpeg.stderr.setEncoding("utf8");
-    ffmpeg.stderr.on("data", (chunk: string) => {
-      if (diagnostic.length < 4096) diagnostic += chunk;
-    });
-    ffmpeg.on("error", (error) => {
-      app.log.warn(
-        { error, recordingId: parsed.data },
-        "thumbnail ffmpeg failed",
-      );
-    });
-    ffmpeg.on("close", (code) => {
-      if (code !== 0) {
-        app.log.warn(
-          { code, recordingId: parsed.data, diagnostic: diagnostic.trim() },
-          "thumbnail extraction failed",
-        );
-      }
-    });
-
-    reply
-      .header("Content-Type", "image/jpeg")
-      .header("Cache-Control", "public, max-age=604800, immutable");
-    return await reply.send(ffmpeg.stdout);
+    if (!file) return;
+    return sendThumbnail(app, reply, file, parsed.data);
   });
+
   app.get("/:id/media", async (request, reply) => {
     const parsed = recordingId.safeParse((request.params as { id: string }).id);
     if (!parsed.success)
@@ -171,50 +243,16 @@ export const recordingRoutes: FastifyPluginAsync<{
       return reply
         .code(404)
         .send({ code: "NOT_FOUND", message: "Recording not found" });
-    const root = resolve(options.storagePath);
-    const file = resolve(root, recording.filePath);
-    if (!file.startsWith(`${root}${sep}`))
-      return reply
-        .code(400)
-        .send({ code: "INVALID_PATH", message: "Invalid recording path" });
-    try {
-      const metadata = await stat(file);
-      if (!metadata.isFile()) throw new Error("not a file");
-      let range: { start: number; end: number } | null;
-      try {
-        range = parseByteRange(request.headers.range, metadata.size);
-      } catch {
-        return await reply
-          .code(416)
-          .header("Content-Range", `bytes */${String(metadata.size)}`)
-          .send();
-      }
-      reply
-        .header("Accept-Ranges", "bytes")
-        .header(
-          "Content-Type",
-          recording.container === "mp4"
-            ? "video/mp4"
-            : "application/octet-stream",
-        );
-      if (range) {
-        reply
-          .code(206)
-          .header(
-            "Content-Range",
-            `bytes ${String(range.start)}-${String(range.end)}/${String(metadata.size)}`,
-          )
-          .header("Content-Length", String(range.end - range.start + 1));
-        return await reply.send(createReadStream(file, range));
-      }
-      reply.header("Content-Length", String(metadata.size));
-      return await reply.send(createReadStream(file));
-    } catch {
-      return reply.code(404).send({
-        code: "FILE_NOT_FOUND",
-        message: "Recording file is unavailable",
-      });
-    }
+
+    // const root = resolve(options.storagePath);
+    // const file = resolve(root, recording.filePath);
+    const file = await resolveRecordingFile(
+      reply,
+      options.storagePath,
+      recording.filePath,
+    );
+    if (!file) return;
+    return sendRecordingMedia(request, reply, file, recording.container);
   });
 };
 
