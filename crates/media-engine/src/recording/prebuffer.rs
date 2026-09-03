@@ -148,10 +148,7 @@ impl PreEventBuffer {
 
                 let _ = fs::remove_file(&target).await;
                 if attempt + 1 < attempts {
-                    tokio::time::sleep(Duration::from_millis(
-                        NEWEST_SEGMENT_RETRY_DELAY_MS,
-                    ))
-                    .await;
+                    tokio::time::sleep(Duration::from_millis(NEWEST_SEGMENT_RETRY_DELAY_MS)).await;
                 }
             }
 
