@@ -42,12 +42,11 @@ impl MotionEventRecorder {
             .await
             .map_err(|error| error.to_string())?;
 
-        let pre_dir = work_dir.join("pre");
-        let pre_segments = match prebuffer {
-            Some(buffer) => buffer.snapshot(event_started_at, &pre_dir).await?,
-            None => Vec::new(),
-        };
-
+        // Start the event recorder before doing any prebuffer file I/O. The
+        // snapshot may need to copy/probe the newest buffered MP4 and can take
+        // a short amount of time. Starting capture first prevents a trigger
+        // boundary gap where the detected object is already moving through the
+        // scene while Aegivue is still staging pre-event clips.
         let event_partial = work_dir.join("event.mp4.partial");
         let mut command = Command::new("ffmpeg");
         command
@@ -84,7 +83,20 @@ impl MotionEventRecorder {
             .stderr(Stdio::piped())
             .kill_on_drop(true);
 
-        let child = command.spawn().map_err(|error| error.to_string())?;
+        let mut child = command.spawn().map_err(|error| error.to_string())?;
+
+        let pre_dir = work_dir.join("pre");
+        let pre_segments = match prebuffer {
+            Some(buffer) => match buffer.snapshot(event_started_at, &pre_dir).await {
+                Ok(segments) => segments,
+                Err(error) => {
+                    let _ = child.kill().await;
+                    return Err(error);
+                }
+            },
+            None => Vec::new(),
+        };
+
         Ok((
             Self {
                 camera,
