@@ -13,7 +13,7 @@ live viewing, and motion-aware recording—with your footage kept on your hardwa
 [![Flutter 3.38.7](https://img.shields.io/badge/Flutter-3.38.7-02569B?logo=flutter)](https://flutter.dev/)
 [![Rust](https://img.shields.io/badge/media-Rust-000000?logo=rust)](https://www.rust-lang.org/)
 
-[Quick start](#quick-start) · [Capabilities](#capabilities) · [Architecture](#architecture) ·
+[Quick start](#quick-start) · [Capabilities](#capabilities) · [Dashboard](#dashboard) · [Architecture](#architecture) ·
 [Documentation](#documentation) · [Development](#development) · [Security](#security)
 
 </div>
@@ -53,12 +53,12 @@ finalized media remains on a dedicated recording volume.
 
 | Area | Capabilities |
 | --- | --- |
-| Cameras | RTSP configuration, enable/disable controls, runtime status, automatic worker recovery |
-| Recording | Continuous or motion-triggered MP4 segments, atomic finalization, pre/post-event capture |
-| Playback | Paginated library, downloads, HTTP range requests, expiry controls |
+| Cameras | RTSP main/substream configuration, enable/disable controls, runtime status, automatic worker recovery |
+| Recording | Continuous capture or one assembled MP4 per motion event, atomic finalization, pre/post-event footage |
+| Playback | Static thumbnails, in-browser playback, paginated library, downloads, HTTP range requests, expiry controls |
 | Retention | Per-camera retention, protected recordings, automatic file and metadata cleanup |
 | Live view | WebRTC, LL-HLS fallback, substream preference, adaptive camera grid, focused viewer |
-| Motion | Supervised frame-difference detector, configurable stream/FPS/sensitivity, persisted events |
+| Motion | Supervised frame-difference detector, configurable stream/FPS/sensitivity, persisted and linked events |
 | Operations | Health checks, structured logs, runtime status, and documented REST endpoints |
 | Platform | Flutter web UI, Fastify/OpenAPI control plane, Rust/Tokio media engine, PostgreSQL |
 | Deployment | Docker Compose, private service networks, health checks, prebuilt GHCR images |
@@ -77,10 +77,10 @@ secret storage, advanced detection, and broad hardware validation are not.
 | Status | Area |
 | --- | --- |
 | ✅ Available | Camera CRUD and lifecycle control |
-| ✅ Available | Continuous recording and indexed playback |
+| ✅ Available | Continuous recording, thumbnails, indexed playback, and downloads |
 | ✅ Available | WebRTC live view with LL-HLS fallback |
 | ✅ Available | Retention and expiry cleanup |
-| 🧪 Experimental | Motion detection, event timeline, and triggered recording |
+| 🧪 Experimental | Motion detection, event timeline, and single-file triggered recordings with pre/post-event footage |
 | 🚧 Planned | Authentication, authorization, and encrypted secret storage |
 | 🚧 Planned | Motion zones, AI detection, and notifications |
 
@@ -169,6 +169,28 @@ docker compose down
 
 This keeps the PostgreSQL and recording volumes. Do not add `--volumes` unless you
 intend to delete data managed by Compose.
+
+## Dashboard
+
+The browser interface uses bookmarkable routes and keeps each section's state
+independent, so switching between cameras, recordings, and events does not reset
+the other sections.
+
+| Route | Purpose |
+| --- | --- |
+| `/` | System overview, camera status, and recent recordings |
+| `/live` | Adaptive live-camera grid and focused viewing |
+| `/recordings` | Paginated recording library, playback, retention, and downloads |
+| `/events` | Motion-event timeline and linked recordings |
+| `/cameras/new` | Add a camera |
+| `/cameras/:id` | Edit an existing camera and its recording or motion settings |
+
+Camera recording can be set to **continuous** or **motion** mode. In motion mode,
+Aegivue maintains a rolling pre-event buffer, starts event capture immediately
+when motion is detected, and assembles the valid buffered footage, active event,
+and configured post-event window into one recording. See
+[Motion and events](docs/motion/events.md) for configuration ranges, failure
+behavior, and current detector limitations.
 
 ## Architecture
 
