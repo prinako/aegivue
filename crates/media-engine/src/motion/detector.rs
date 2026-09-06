@@ -14,7 +14,9 @@ const WIDTH: usize = 160;
 const HEIGHT: usize = 90;
 const FRAME_BYTES: usize = WIDTH * HEIGHT;
 const PIXEL_DELTA_THRESHOLD: u8 = 20;
-const QUIET_SECONDS: f64 = 2.0;
+const QUIET_SECONDS: f64 = 5.0;
+const KEEP_ALIVE_THRESHOLD_RATIO: f64 = 0.35;
+const SCORE_EMA_ALPHA: f64 = 0.40;
 
 pub async fn supervise(camera: CameraConfig, database: PgPool, shutdown: CancellationToken) {
     if !camera.motion_enabled {
@@ -65,21 +67,27 @@ async fn run_once(
         return Err("motion FFmpeg stdout unavailable".into());
     };
 
+    let trigger_threshold = sensitivity_threshold(camera.motion_sensitivity);
+    let keep_alive_threshold = keep_alive_threshold(trigger_threshold);
+    let quiet_frames = ((camera.motion_fps * QUIET_SECONDS).ceil() as usize).max(2);
+
     tracing::info!(
         camera_id=%camera.id,
         fps=camera.motion_fps,
         sensitivity=camera.motion_sensitivity,
         stream=%camera.motion_stream,
+        trigger_threshold,
+        keep_alive_threshold,
+        quiet_seconds=QUIET_SECONDS,
         "motion detector started"
     );
 
-    let trigger_threshold = sensitivity_threshold(camera.motion_sensitivity);
-    let quiet_frames = ((camera.motion_fps * QUIET_SECONDS).ceil() as usize).max(2);
     let mut previous = vec![0_u8; FRAME_BYTES];
     let mut current = vec![0_u8; FRAME_BYTES];
     let mut have_previous = false;
     let mut quiet_count = 0usize;
     let mut active_event: Option<Uuid> = None;
+    let mut smoothed_score = 0.0;
     let started = Instant::now();
 
     loop {
@@ -105,40 +113,56 @@ async fn run_once(
 
         let score = motion_score(&previous, &current);
         previous.copy_from_slice(&current);
+        smoothed_score = exponential_moving_average(smoothed_score, score);
 
-        if score >= trigger_threshold {
-            quiet_count = 0;
-            match active_event {
-                Some(event_id) => {
-                    if let Err(error) = update_event_score(database, event_id, score).await {
-                        tracing::warn!(camera_id=%camera.id, %error, "unable to update motion event score");
-                    }
+        if active_event.is_none() && score >= trigger_threshold {
+            match start_event(database, camera, score).await {
+                Ok(event_id) => {
+                    active_event = Some(event_id);
+                    quiet_count = 0;
+                    tracing::info!(
+                        camera_id=%camera.id,
+                        event_id=%event_id,
+                        score,
+                        smoothed_score,
+                        threshold=trigger_threshold,
+                        keep_alive_threshold,
+                        "motion event started"
+                    );
                 }
-                None => match start_event(database, camera, score).await {
-                    Ok(event_id) => {
-                        active_event = Some(event_id);
+                Err(error) => {
+                    tracing::warn!(camera_id=%camera.id, %error, "unable to persist motion event");
+                }
+            }
+            continue;
+        }
+
+        if let Some(event_id) = active_event {
+            let sustained_score = score.max(smoothed_score);
+            if sustained_score >= keep_alive_threshold {
+                quiet_count = 0;
+                if let Err(error) = update_event_score(database, event_id, score).await {
+                    tracing::warn!(camera_id=%camera.id, %error, "unable to update motion event score");
+                }
+            } else {
+                quiet_count += 1;
+                if quiet_count >= quiet_frames {
+                    if let Err(error) = end_event(database, event_id).await {
+                        tracing::warn!(camera_id=%camera.id, %error, "unable to end motion event");
+                    } else {
                         tracing::info!(
                             camera_id=%camera.id,
                             event_id=%event_id,
                             score,
-                            threshold=trigger_threshold,
-                            "motion event started"
+                            smoothed_score,
+                            keep_alive_threshold,
+                            quiet_seconds=QUIET_SECONDS,
+                            "motion event ended after sustained quiet"
                         );
+                        active_event = None;
+                        quiet_count = 0;
+                        smoothed_score = 0.0;
                     }
-                    Err(error) => {
-                        tracing::warn!(camera_id=%camera.id, %error, "unable to persist motion event");
-                    }
-                },
-            }
-        } else if let Some(event_id) = active_event {
-            quiet_count += 1;
-            if quiet_count >= quiet_frames {
-                if let Err(error) = end_event(database, event_id).await {
-                    tracing::warn!(camera_id=%camera.id, %error, "unable to end motion event");
-                } else {
-                    tracing::info!(camera_id=%camera.id, event_id=%event_id, "motion event ended");
-                    active_event = None;
-                    quiet_count = 0;
                 }
             }
         }
@@ -188,6 +212,14 @@ fn sensitivity_threshold(sensitivity: f64) -> f64 {
     0.30 - (0.295 * sensitivity)
 }
 
+fn keep_alive_threshold(trigger_threshold: f64) -> f64 {
+    (trigger_threshold * KEEP_ALIVE_THRESHOLD_RATIO).clamp(0.005, trigger_threshold)
+}
+
+fn exponential_moving_average(previous: f64, current: f64) -> f64 {
+    (SCORE_EMA_ALPHA * current) + ((1.0 - SCORE_EMA_ALPHA) * previous)
+}
+
 fn motion_score(previous: &[u8], current: &[u8]) -> f64 {
     if previous.len() != current.len() || previous.is_empty() {
         return 0.0;
@@ -207,11 +239,15 @@ async fn start_event(
     score: f64,
 ) -> Result<Uuid, sqlx::Error> {
     let event_id = Uuid::new_v4();
+    let trigger_threshold = sensitivity_threshold(camera.motion_sensitivity);
     let metadata = json!({
-        "detector": "frame-difference-v1",
+        "detector": "frame-difference-v2-hysteresis",
         "stream": camera.motion_stream,
         "analysisFps": camera.motion_fps,
         "sensitivity": camera.motion_sensitivity,
+        "triggerThreshold": trigger_threshold,
+        "keepAliveThreshold": keep_alive_threshold(trigger_threshold),
+        "quietSeconds": QUIET_SECONDS,
         "width": WIDTH,
         "height": HEIGHT
     })
@@ -274,5 +310,21 @@ mod tests {
         assert!(sensitivity_threshold(0.9) < sensitivity_threshold(0.2));
         assert!((sensitivity_threshold(1.0) - 0.005).abs() < 1e-9);
         assert!((sensitivity_threshold(0.0) - 0.30).abs() < 1e-9);
+    }
+
+    #[test]
+    fn keep_alive_threshold_is_lower_than_trigger_threshold() {
+        let trigger = sensitivity_threshold(0.65);
+        let keep_alive = keep_alive_threshold(trigger);
+        assert!(keep_alive < trigger);
+        assert!((keep_alive - 0.0378875).abs() < 1e-9);
+    }
+
+    #[test]
+    fn exponential_moving_average_keeps_recent_motion_signal() {
+        let first = exponential_moving_average(0.0, 0.12);
+        let second = exponential_moving_average(first, 0.02);
+        assert!((first - 0.048).abs() < 1e-9);
+        assert!((second - 0.0368).abs() < 1e-9);
     }
 }

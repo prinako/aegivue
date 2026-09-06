@@ -14,6 +14,8 @@ use tokio_util::sync::CancellationToken;
 const BUFFER_SEGMENT_SECONDS: u64 = 1;
 const PRUNE_INTERVAL_SECONDS: u64 = 2;
 const SAFETY_SEGMENTS: i64 = 3;
+const NEWEST_SEGMENT_RETRIES: usize = 4;
+const NEWEST_SEGMENT_RETRY_DELAY_MS: u64 = 250;
 
 pub struct PreEventBuffer {
     root: PathBuf,
@@ -120,26 +122,39 @@ impl PreEventBuffer {
         }
         candidates.sort_by_key(|(_, start)| *start);
 
-        // FFmpeg may still have the newest segment open. Keep it out of the
-        // event snapshot so only complete MP4 files are assembled later.
-        if !candidates.is_empty() {
-            candidates.pop();
-        }
-
         fs::create_dir_all(destination)
             .await
             .map_err(|error| error.to_string())?;
+
+        let newest_index = candidates.len().checked_sub(1);
         let mut staged = Vec::new();
         for (index, (source, start)) in candidates.into_iter().enumerate() {
             let target = destination.join(format!("pre-{index:04}.mp4"));
-            if fs::copy(&source, &target).await.is_err() {
-                continue;
-            }
-            if probe_duration_ms(&target).await.is_none() {
+            let attempts = if Some(index) == newest_index {
+                NEWEST_SEGMENT_RETRIES
+            } else {
+                1
+            };
+
+            let mut accepted = false;
+            for attempt in 0..attempts {
                 let _ = fs::remove_file(&target).await;
-                continue;
+                if fs::copy(&source, &target).await.is_ok()
+                    && probe_duration_ms(&target).await.is_some()
+                {
+                    accepted = true;
+                    break;
+                }
+
+                let _ = fs::remove_file(&target).await;
+                if attempt + 1 < attempts {
+                    tokio::time::sleep(Duration::from_millis(NEWEST_SEGMENT_RETRY_DELAY_MS)).await;
+                }
             }
-            staged.push((target, start));
+
+            if accepted {
+                staged.push((target, start));
+            }
         }
         Ok(staged)
     }
