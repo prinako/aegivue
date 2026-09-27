@@ -25,9 +25,10 @@ day-two operations, architecture, and contribution workflows.
 ### I want to contribute
 
 1. [Set up the development environment](development/getting-started.md).
-2. Read the [system architecture](architecture/overview.md).
-3. Review [ADR 0001: Service boundaries](architecture/0001-service-boundaries.md).
-4. Run the complete local CI command set before opening a pull request.
+2. Optionally [install the curated project agent skills](development/agent-skills.md).
+3. Read the [system architecture](architecture/overview.md).
+4. Review [ADR 0001: Service boundaries](architecture/0001-service-boundaries.md).
+5. Run the complete local CI command set before opening a pull request.
 
 ## Documentation map
 
@@ -42,6 +43,7 @@ day-two operations, architecture, and contribution workflows.
 | Architecture | [System overview](architecture/overview.md) | Data flows, trust boundaries, storage, and failure isolation |
 | Architecture | [ADR 0001](architecture/0001-service-boundaries.md) | Rationale for the current service boundaries |
 | Development | [Development setup](development/getting-started.md) | Toolchains, local stack, tests, formatting, and migrations |
+| Development | [Agent skills](development/agent-skills.md) | Reviewed project-scoped skills, installation, and update policy |
 
 ## Supported deployment model
 
