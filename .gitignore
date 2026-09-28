@@ -9,6 +9,7 @@ target/
 **/.fvm/
 .pytest_cache/
 __pycache__/
+.agents/skills/
 storage/recordings/*
 storage/snapshots/*
 storage/thumbnails/*
