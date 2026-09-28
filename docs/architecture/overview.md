@@ -36,6 +36,32 @@ flowchart LR
 
 The detailed rationale is recorded in [ADR 0001](0001-service-boundaries.md).
 
+## Flutter web structure
+
+The Flutter dashboard uses feature-first, pragmatic MVVM modules under
+`apps/web/lib/features`. Dependencies flow in one direction:
+
+```text
+Page or widget -> ChangeNotifier ViewModel -> repository -> ApiClient
+```
+
+- Domain models are simple Dart objects. Keep one public model class per Dart
+  file and import the model explicitly.
+- Pages own routing, form submission, and screen-level orchestration. Keep them
+  lean by extracting substantial visual sections into the feature's
+  `presentation/widgets` directory.
+- Each extracted public widget belongs in its own Dart file. Its private
+  `State` class and small private rendering helpers stay with that widget.
+- UI-only state can remain local to a widget. Async loading, errors, results,
+  and user actions that call repositories belong in a feature ViewModel.
+- Repositories are the data/model seam. Widgets and pages do not call
+  `ApiClient` directly.
+
+For example, the camera settings page coordinates validation and saving, while
+its camera, connection, recording, and motion form sections live as separate
+widgets. A shared presentation form model keeps those widget interfaces small
+without moving text controllers into the domain layer.
+
 ## Core data flows
 
 ### Camera reconciliation
