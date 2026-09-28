@@ -1,6 +1,6 @@
-import 'package:aegivue/features/cameras/camera_controller.dart';
-import 'package:aegivue/features/events/event_controller.dart';
-import 'package:aegivue/features/recordings/recording_controller.dart';
+import 'package:aegivue/features/cameras/presentation/view_models/camera_list_view_model.dart';
+import 'package:aegivue/features/events/presentation/view_models/event_list_view_model.dart';
+import 'package:aegivue/features/recordings/presentation/view_models/recording_list_view_model.dart';
 import 'package:aegivue/shared/widgets/app_header_widget.dart';
 import 'package:aegivue/shared/widgets/side_nav_widget.dart';
 import 'package:flutter/material.dart';
@@ -15,14 +15,14 @@ class DashboardPage extends StatelessWidget {
   Future<void> _addCamera(BuildContext context) async {
     final changed = await context.push<bool>('/cameras/new');
     if (!context.mounted || changed != true) return;
-    await context.read<CameraController>().refresh();
+    await context.read<CameraListViewModel>().refresh();
   }
 
   Future<void> _refreshAll(BuildContext context) async {
     await Future.wait([
-      context.read<CameraController>().refresh(),
-      context.read<RecordingController>().refresh(),
-      context.read<EventController>().refresh(),
+      context.read<CameraListViewModel>().refresh(),
+      context.read<RecordingListViewModel>().refresh(),
+      context.read<EventListViewModel>().refresh(),
     ]);
   }
 
