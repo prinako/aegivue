@@ -40,7 +40,7 @@ day-two operations, architecture, and contribution workflows.
 | Motion | [Motion detection and events](motion/events.md) | Detector settings, event lifecycle, API, and limitations |
 | Operations | [Upgrades](operations/upgrades.md) | Backups, migrations, verification, and rollback considerations |
 | Operations | [Troubleshooting](operations/troubleshooting.md) | Symptom-first incident checks and diagnostic commands |
-| Architecture | [System overview](architecture/overview.md) | Data flows, trust boundaries, storage, and failure isolation |
+| Architecture | [System overview](architecture/overview.md) | Service data flows, Flutter feature structure, trust boundaries, storage, and failure isolation |
 | Architecture | [ADR 0001](architecture/0001-service-boundaries.md) | Rationale for the current service boundaries |
 | Development | [Development setup](development/getting-started.md) | Toolchains, local stack, tests, formatting, and migrations |
 | Development | [Agent skills](development/agent-skills.md) | Reviewed project-scoped skills, installation, and update policy |

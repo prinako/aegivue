@@ -1,8 +1,7 @@
-import 'package:aegivue/core/utils/formatters.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
-import 'package:aegivue/features/recordings/presentation/recording_download.dart';
+import 'package:aegivue/features/recordings/presentation/widgets/recording_expiry_sheet.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_list_widget.dart';
-import 'package:aegivue/features/recordings/presentation/widgets/recording_player.dart';
+import 'package:aegivue/features/recordings/presentation/widgets/selected_recording_card.dart';
 import 'package:flutter/material.dart';
 
 class RecordingLibrary extends StatefulWidget {
@@ -14,6 +13,7 @@ class RecordingLibrary extends StatefulWidget {
     required this.onSetExpiry,
     required this.hasMore,
     required this.loadingMore,
+    required this.updatingExpiry,
   });
 
   final List<Recording> recordings;
@@ -23,6 +23,7 @@ class RecordingLibrary extends StatefulWidget {
   onSetExpiry;
   final bool hasMore;
   final bool loadingMore;
+  final bool updatingExpiry;
 
   @override
   State<RecordingLibrary> createState() => _RecordingLibraryState();
@@ -68,6 +69,7 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
   }
 
   Future<void> _setExpiry(Recording recording) async {
+    if (widget.updatingExpiry) return;
     if (recording.protected) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Protected recordings cannot expire.')),
@@ -77,43 +79,10 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
 
     final action = await showModalBottomSheet<_ExpiryAction>(
       context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Recording expiry',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                recording.expiresAt == null
-                    ? 'This recording is currently kept indefinitely.'
-                    : 'Current expiry: ${_formatExpiry(recording.expiresAt!)}',
-                style: const TextStyle(color: Colors.white60),
-              ),
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: () =>
-                    Navigator.of(sheetContext).pop(_ExpiryAction.pick),
-                icon: const Icon(Icons.event_rounded),
-                label: const Text('Choose expiry date'),
-              ),
-              if (recording.expiresAt != null) ...[
-                const SizedBox(height: 8),
-                TextButton.icon(
-                  onPressed: () =>
-                      Navigator.of(sheetContext).pop(_ExpiryAction.clear),
-                  icon: const Icon(Icons.all_inclusive_rounded),
-                  label: const Text('Keep indefinitely'),
-                ),
-              ],
-            ],
-          ),
-        ),
+      builder: (sheetContext) => RecordingExpirySheet(
+        recording: recording,
+        onPick: () => Navigator.of(sheetContext).pop(_ExpiryAction.pick),
+        onClear: () => Navigator.of(sheetContext).pop(_ExpiryAction.clear),
       ),
     );
     if (!mounted || action == null) return;
@@ -181,10 +150,11 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
           ),
           if (selected != null) ...[
             const SizedBox(height: 20),
-            _SelectedRecording(
+            SelectedRecordingCard(
               recording: selected!,
               onSetExpiry: () => _setExpiry(selected!),
               onClose: () => setState(() => selected = null),
+              updatingExpiry: widget.updatingExpiry,
             ),
           ],
           const SizedBox(height: 20),
@@ -205,143 +175,6 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
               ),
             ),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SelectedRecording extends StatelessWidget {
-  const _SelectedRecording({
-    required this.recording,
-    required this.onSetExpiry,
-    required this.onClose,
-  });
-
-  final Recording recording;
-  final VoidCallback onSetExpiry;
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-            child: Row(
-              children: [
-                const Icon(Icons.play_circle_fill_rounded, size: 20),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        recording.cameraId,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        Formatters.recordingTimestamp(recording.startTime),
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: recording.expiresAt == null
-                      ? 'Set expiry date'
-                      : 'Change expiry date',
-                  onPressed: onSetExpiry,
-                  icon: Icon(
-                    recording.expiresAt == null
-                        ? Icons.event_available_outlined
-                        : Icons.event_busy_outlined,
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Download recording',
-                  onPressed: () => RecordingDownload.start(recording),
-                  icon: const Icon(Icons.download_rounded),
-                ),
-                IconButton(
-                  tooltip: 'Close player',
-                  onPressed: onClose,
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ],
-            ),
-          ),
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: RecordingPlayer(playbackUrl: recording.playbackUrl),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-            child: Wrap(
-              spacing: 14,
-              runSpacing: 8,
-              children: [
-                _Detail(
-                  label: 'Container',
-                  value: recording.container.toUpperCase(),
-                ),
-                if (recording.videoCodec != null)
-                  _Detail(label: 'Video', value: recording.videoCodec!),
-                if (recording.audioCodec != null)
-                  _Detail(label: 'Audio', value: recording.audioCodec!),
-                if (recording.width != null && recording.height != null)
-                  _Detail(
-                    label: 'Resolution',
-                    value: '${recording.width}×${recording.height}',
-                  ),
-                if (recording.fps != null)
-                  _Detail(
-                    label: 'FPS',
-                    value: recording.fps!.toStringAsFixed(1),
-                  ),
-                _Detail(
-                  label: 'Retention',
-                  value: recording.expiresAt == null
-                      ? 'Keep indefinitely'
-                      : 'Expires ${_formatExpiry(recording.expiresAt!)}',
-                ),
-                if (recording.protected)
-                  const _Detail(label: 'Protection', value: 'Protected'),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Detail extends StatelessWidget {
-  const _Detail({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return RichText(
-      text: TextSpan(
-        style: const TextStyle(fontSize: 11, color: Colors.white54),
-        children: [
-          TextSpan(text: '$label: '),
-          TextSpan(
-            text: value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
         ],
       ),
     );

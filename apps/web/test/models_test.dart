@@ -1,6 +1,7 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:aegivue/features/cameras/domain/camera.dart';
+import 'package:aegivue/features/cameras/domain/camera_configuration.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('recording parses API contract', () {

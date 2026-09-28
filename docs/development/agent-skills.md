@@ -32,7 +32,8 @@ Equivalent manual commands for Codex are:
 ```sh
 npx --yes skills add https://github.com/flutter/agent-plugins \
   --agent codex --yes \
-  --skill flutter-setup-declarative-routing dart-run-static-analysis
+  --skill flutter-apply-architecture-best-practices \
+  flutter-setup-declarative-routing dart-run-static-analysis
 
 npx --yes skills add https://github.com/neondatabase/postgres-skills \
   --agent codex --yes \
@@ -57,6 +58,7 @@ npx --yes skills add https://github.com/obra/superpowers \
 
 | Area | Skill and source | Use in Aegivue |
 | --- | --- | --- |
+| Flutter | [`flutter-apply-architecture-best-practices`](https://github.com/flutter/agent-plugins) | Pragmatic UI, ViewModel, and repository separation during Flutter feature work and focused refactors. Repository instructions still decide which optional layers are warranted. |
 | Flutter | [`flutter-setup-declarative-routing`](https://github.com/flutter/agent-plugins) | Router changes, deep links, browser history, and URL-based navigation in the web app. |
 | Dart | [`dart-run-static-analysis`](https://github.com/flutter/agent-plugins) | Analyzer findings, lint configuration, and safe mechanical Dart fixes. |
 | PostgreSQL | [`postgres-best-practices`](https://github.com/neondatabase/postgres-skills) | Schema, migration, indexing, query, transaction, and production-compatibility work. |
@@ -81,6 +83,8 @@ The following originally proposed names were not present in
 are intentionally not installed:
 
 - `flutter-architecting-apps`
+- `flutter-architecture`
+- `flutter-managing-state`
 - `flutter-testing`
 
 No replacement has been silently substituted. Reassess the upstream catalog
@@ -88,7 +92,7 @@ and Aegivue's needs before proposing alternatives.
 
 ## Verification snapshot
 
-The eleven installed names and their CLI commands were verified on 2026-09-27
+The twelve installed names and their CLI commands were verified on 2026-09-28
 against these upstream revisions:
 
 - `flutter/agent-plugins` at `3f58a55`

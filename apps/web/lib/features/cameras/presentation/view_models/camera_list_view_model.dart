@@ -1,12 +1,11 @@
-import 'package:aegivue/core/api/api_client.dart';
 import 'package:aegivue/features/cameras/data/camera_repository.dart';
 import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:flutter/foundation.dart';
 
-class CameraController extends ChangeNotifier {
-  CameraController(ApiClient api) : repository = CameraRepository(api);
+class CameraListViewModel extends ChangeNotifier {
+  CameraListViewModel(this._repository);
 
-  final CameraRepository repository;
+  final CameraRepository _repository;
 
   List<Camera> _items = const [];
   bool _loading = false;
@@ -37,7 +36,7 @@ class CameraController extends ChangeNotifier {
     _error = null;
 
     try {
-      final cameras = await repository.list();
+      final cameras = await _repository.list();
       _items = List<Camera>.unmodifiable(cameras);
       _loaded = true;
     } catch (error) {
