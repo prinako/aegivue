@@ -86,7 +86,7 @@ class AegivueLivePlayer extends HTMLElement {
     if (generation !== this.generation) return;
 
     const endpoint = `/webrtc/${encodeURIComponent(cameraId)}/whep`;
-    const response = await fetch(endpoint, {
+    const response = await this.fetchWithTimeout(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/sdp' },
       body: peer.localDescription.sdp,
@@ -98,14 +98,29 @@ class AegivueLivePlayer extends HTMLElement {
     }
 
     const location = response.headers.get('Location');
+    let session = null;
     if (location) {
       const parsed = new URL(location, window.location.origin);
-      this.whepSession = `/webrtc${parsed.pathname}`;
+      session = `/webrtc${parsed.pathname}`;
     }
 
     const answer = await response.text();
-    if (generation !== this.generation) return;
+    if (generation !== this.generation) {
+      if (session) this.deleteWhepSession(session);
+      return;
+    }
+    this.whepSession = session;
     await peer.setRemoteDescription({ type: 'answer', sdp: answer });
+  }
+
+  async fetchWithTimeout(url, options, timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   waitForIceGathering(peer) {
@@ -192,9 +207,13 @@ class AegivueLivePlayer extends HTMLElement {
       this.peer = null;
     }
     if (this.whepSession) {
-      fetch(this.whepSession, { method: 'DELETE', keepalive: true }).catch(() => {});
+      this.deleteWhepSession(this.whepSession);
       this.whepSession = null;
     }
+  }
+
+  deleteWhepSession(session) {
+    fetch(session, { method: 'DELETE', keepalive: true }).catch(() => {});
   }
 
   stop() {

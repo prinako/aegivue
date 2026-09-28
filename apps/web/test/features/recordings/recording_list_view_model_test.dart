@@ -49,6 +49,39 @@ void main() {
     expect(viewModel.items.map((item) => item.id), ['new']);
   });
 
+  test('an older load cannot overwrite a newer refresh', () async {
+    final first = Completer<RecordingPage>();
+    final repository = _FakeRecordingRepository()..pages[1] = first.future;
+    final viewModel = RecordingListViewModel(repository);
+
+    final initialLoad = viewModel.load();
+    repository.pages[1] = Future.value(_page(1, [_recording('new')]));
+    await viewModel.refresh();
+    first.complete(_page(1, [_recording('old')]));
+    await initialLoad;
+
+    expect(viewModel.items.single.id, 'new');
+  });
+
+  test('refresh invalidates an in-flight pagination response', () async {
+    final nextPage = Completer<RecordingPage>();
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(
+        _page(1, [_recording('old-first')], totalPages: 2),
+      )
+      ..pages[2] = nextPage.future;
+    final viewModel = RecordingListViewModel(repository);
+    await viewModel.load();
+
+    final pagination = viewModel.loadMore();
+    repository.pages[1] = Future.value(_page(1, [_recording('new-first')]));
+    await viewModel.refresh();
+    nextPage.complete(_page(2, [_recording('old-second')], totalPages: 2));
+    await pagination;
+
+    expect(viewModel.items.map((item) => item.id), ['new-first']);
+  });
+
   test('loadMore appends the next page without duplicate recordings', () async {
     final repository = _FakeRecordingRepository()
       ..pages[1] = Future.value(

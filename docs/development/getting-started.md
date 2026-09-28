@@ -137,8 +137,14 @@ flutter pub get
 dart format --output=none --set-exit-if-changed .
 flutter analyze
 flutter test
+flutter test --platform chrome
+node --test test_js
 flutter build web --release
 ```
+
+The default Flutter test run exercises VM-compatible unit and widget tests.
+The Chrome run adds browser-only widget coverage, while `node --test test_js`
+checks the JavaScript media-player integration.
 
 CI uses Flutter 3.38.7. If you use FVM, prefix Flutter and Dart commands with
 `fvm`. To apply formatting changes, run `dart format .`.

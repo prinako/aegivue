@@ -14,7 +14,7 @@ class AppErrorStateWidget extends StatelessWidget {
           const Icon(Icons.cloud_off_outlined, size: 40, color: Colors.white38),
           const SizedBox(height: 12),
           const Text(
-            'Unable to load Vigilo data',
+            'Unable to load Aegivue data',
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 14),

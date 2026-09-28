@@ -306,6 +306,9 @@ flutter pub get
 dart format --output=none --set-exit-if-changed .
 flutter analyze
 flutter test
+flutter test --platform chrome
+node --test test_js
+flutter build web --release
 ```
 
 Required toolchains are Node.js 22+, stable Rust with `rustfmt` and `clippy`, and

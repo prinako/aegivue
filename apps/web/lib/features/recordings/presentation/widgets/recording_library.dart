@@ -90,18 +90,31 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
     DateTime? expiresAt;
     if (action == _ExpiryAction.pick) {
       final now = DateTime.now();
-      final initial = recording.expiresAt?.toLocal();
+      final firstDate = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).add(const Duration(days: 1));
+      final lastDate = DateTime(now.year + 10, 12, 31);
+      final currentExpiry = recording.expiresAt?.toLocal();
+      final currentDate = currentExpiry == null
+          ? null
+          : DateTime(
+              currentExpiry.year,
+              currentExpiry.month,
+              currentExpiry.day,
+            );
+      final initialDate =
+          currentDate != null &&
+              !currentDate.isBefore(firstDate) &&
+              !currentDate.isAfter(lastDate)
+          ? currentDate
+          : DateTime(now.year, now.month, now.day).add(const Duration(days: 7));
       final date = await showDatePicker(
         context: context,
-        initialDate: initial != null && initial.isAfter(now)
-            ? initial
-            : now.add(const Duration(days: 7)),
-        firstDate: DateTime(
-          now.year,
-          now.month,
-          now.day,
-        ).add(const Duration(days: 1)),
-        lastDate: DateTime(now.year + 10, 12, 31),
+        initialDate: initialDate,
+        firstDate: firstDate,
+        lastDate: lastDate,
         helpText: 'Delete recording after',
       );
       if (date == null) return;

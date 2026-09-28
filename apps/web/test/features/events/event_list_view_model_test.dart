@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:aegivue/core/api/api_client.dart';
 import 'package:aegivue/features/events/data/event_page.dart';
 import 'package:aegivue/features/events/data/event_repository.dart';
@@ -42,6 +44,37 @@ void main() {
     expect(viewModel.items.single.id, 'event-2');
     expect(viewModel.loaded, isTrue);
     expect(viewModel.error, isNull);
+  });
+
+  test('an older load cannot overwrite a newer refresh', () async {
+    final first = Completer<EventPage>();
+    final repository = _FakeEventRepository()..pages[1] = first.future;
+    final viewModel = EventListViewModel(repository);
+
+    final initialLoad = viewModel.load();
+    repository.pages[1] = Future.value(_page(1, [_event('new')]));
+    await viewModel.refresh();
+    first.complete(_page(1, [_event('old')]));
+    await initialLoad;
+
+    expect(viewModel.items.single.id, 'new');
+  });
+
+  test('refresh invalidates an in-flight pagination response', () async {
+    final nextPage = Completer<EventPage>();
+    final repository = _FakeEventRepository()
+      ..pages[1] = Future.value(_page(1, [_event('old-first')], totalPages: 2))
+      ..pages[2] = nextPage.future;
+    final viewModel = EventListViewModel(repository);
+    await viewModel.load();
+
+    final pagination = viewModel.loadMore();
+    repository.pages[1] = Future.value(_page(1, [_event('new-first')]));
+    await viewModel.refresh();
+    nextPage.complete(_page(2, [_event('old-second')], totalPages: 2));
+    await pagination;
+
+    expect(viewModel.items.map((item) => item.id), ['new-first']);
   });
 
   test('loadMore appends unique events from the next page', () async {

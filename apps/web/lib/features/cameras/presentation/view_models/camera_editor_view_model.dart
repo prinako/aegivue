@@ -18,6 +18,7 @@ class CameraEditorViewModel extends ChangeNotifier {
   Camera? get savedCamera => _savedCamera;
 
   Future<bool> save(CameraConfiguration configuration) async {
+    if (_saving) return false;
     _saving = true;
     _error = null;
     _savedCamera = null;

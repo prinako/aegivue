@@ -16,6 +16,7 @@ class EventListViewModel extends ChangeNotifier {
   int _page = 1;
   bool _hasMore = false;
   bool _loadingMore = false;
+  int _reloadGeneration = 0;
 
   List<AegivueEvent> get items => _items;
   bool get loading => _loading;
@@ -24,29 +25,33 @@ class EventListViewModel extends ChangeNotifier {
   bool get hasMore => _hasMore;
   bool get loadingMore => _loadingMore;
 
-  Future<void> load() => _reload(showLoading: !_loaded);
+  Future<void> load() => _reload();
 
-  Future<void> refresh() => _reload(showLoading: false);
+  Future<void> refresh() => _reload();
 
-  Future<void> _reload({required bool showLoading}) async {
-    if (showLoading) {
-      _loading = true;
-      notifyListeners();
-    }
+  Future<void> _reload() async {
+    final generation = ++_reloadGeneration;
+    _loading = true;
+    _loadingMore = false;
     _error = null;
+    notifyListeners();
     try {
       final page = await _repository.listPage(
         page: 1,
         pageSize: _pageSize,
         kind: 'motion',
       );
+      if (generation != _reloadGeneration) return;
       _applyPage(page);
       _loaded = true;
     } catch (error) {
+      if (generation != _reloadGeneration) return;
       _error = error;
     } finally {
-      _loading = false;
-      notifyListeners();
+      if (generation == _reloadGeneration) {
+        _loading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -57,7 +62,8 @@ class EventListViewModel extends ChangeNotifier {
   }
 
   Future<void> loadMore() async {
-    if (_loadingMore || !_hasMore) return;
+    if (_loading || _loadingMore || !_hasMore) return;
+    final generation = _reloadGeneration;
     _loadingMore = true;
     _error = null;
     notifyListeners();
@@ -67,6 +73,7 @@ class EventListViewModel extends ChangeNotifier {
         pageSize: _pageSize,
         kind: 'motion',
       );
+      if (generation != _reloadGeneration) return;
       final existingIds = _items.map((item) => item.id).toSet();
       _items = List<AegivueEvent>.unmodifiable([
         ..._items,
@@ -75,10 +82,13 @@ class EventListViewModel extends ChangeNotifier {
       _page = nextPage.page;
       _hasMore = nextPage.hasMore;
     } catch (error) {
+      if (generation != _reloadGeneration) return;
       _error = error;
     } finally {
-      _loadingMore = false;
-      notifyListeners();
+      if (generation == _reloadGeneration) {
+        _loadingMore = false;
+        notifyListeners();
+      }
     }
   }
 }

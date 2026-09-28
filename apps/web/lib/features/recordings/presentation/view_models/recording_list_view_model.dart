@@ -18,6 +18,7 @@ class RecordingListViewModel extends ChangeNotifier {
   bool _loadingMore = false;
   bool _updatingExpiry = false;
   Object? _expiryError;
+  int _reloadGeneration = 0;
 
   List<Recording> get items => _items;
   bool get loading => _loading;
@@ -28,25 +29,29 @@ class RecordingListViewModel extends ChangeNotifier {
   bool get updatingExpiry => _updatingExpiry;
   Object? get expiryError => _expiryError;
 
-  Future<void> load() => _reload(showLoading: !_loaded);
+  Future<void> load() => _reload();
 
-  Future<void> refresh() => _reload(showLoading: false);
+  Future<void> refresh() => _reload();
 
-  Future<void> _reload({required bool showLoading}) async {
-    if (showLoading) {
-      _loading = true;
-      notifyListeners();
-    }
+  Future<void> _reload() async {
+    final generation = ++_reloadGeneration;
+    _loading = true;
+    _loadingMore = false;
     _error = null;
+    notifyListeners();
     try {
       final page = await _repository.listPage(page: 1, pageSize: _pageSize);
+      if (generation != _reloadGeneration) return;
       _applyPage(page);
       _loaded = true;
     } catch (error) {
+      if (generation != _reloadGeneration) return;
       _error = error;
     } finally {
-      _loading = false;
-      notifyListeners();
+      if (generation == _reloadGeneration) {
+        _loading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -57,7 +62,8 @@ class RecordingListViewModel extends ChangeNotifier {
   }
 
   Future<void> loadMore() async {
-    if (_loadingMore || !_hasMore) return;
+    if (_loading || _loadingMore || !_hasMore) return;
+    final generation = _reloadGeneration;
     _loadingMore = true;
     _error = null;
     notifyListeners();
@@ -66,6 +72,7 @@ class RecordingListViewModel extends ChangeNotifier {
         page: _page + 1,
         pageSize: _pageSize,
       );
+      if (generation != _reloadGeneration) return;
       final existingIds = _items.map((item) => item.id).toSet();
       _items = List<Recording>.unmodifiable([
         ..._items,
@@ -74,10 +81,13 @@ class RecordingListViewModel extends ChangeNotifier {
       _page = nextPage.page;
       _hasMore = nextPage.hasMore;
     } catch (error) {
+      if (generation != _reloadGeneration) return;
       _error = error;
     } finally {
-      _loadingMore = false;
-      notifyListeners();
+      if (generation == _reloadGeneration) {
+        _loadingMore = false;
+        notifyListeners();
+      }
     }
   }
 

@@ -11,6 +11,7 @@ class CameraListViewModel extends ChangeNotifier {
   bool _loading = false;
   bool _loaded = false;
   Object? _error;
+  int _reloadGeneration = 0;
 
   List<Camera> get items => _items;
   bool get loading => _loading;
@@ -29,6 +30,7 @@ class CameraListViewModel extends ChangeNotifier {
   Future<void> refresh() => _reload(showLoading: false);
 
   Future<void> _reload({required bool showLoading}) async {
+    final generation = ++_reloadGeneration;
     if (showLoading) {
       _loading = true;
       notifyListeners();
@@ -37,13 +39,17 @@ class CameraListViewModel extends ChangeNotifier {
 
     try {
       final cameras = await _repository.list();
+      if (generation != _reloadGeneration) return;
       _items = List<Camera>.unmodifiable(cameras);
       _loaded = true;
     } catch (error) {
+      if (generation != _reloadGeneration) return;
       _error = error;
     } finally {
-      _loading = false;
-      notifyListeners();
+      if (generation == _reloadGeneration) {
+        _loading = false;
+        notifyListeners();
+      }
     }
   }
 
