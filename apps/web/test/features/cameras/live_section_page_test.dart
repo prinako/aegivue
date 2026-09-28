@@ -14,11 +14,11 @@ void main() {
   testWidgets('keeps loaded content and offers retry after refresh failure', (
     tester,
   ) async {
-    final repository = _FakeCameraRepository(Future.value(const []));
+    final repository = _FakeCameraRepository(const <Camera>[]);
     final viewModel = CameraListViewModel(repository);
-    await viewModel.load();
-    repository.result = Future.error(StateError('offline'));
-    await viewModel.refresh();
+    await tester.runAsync(viewModel.load);
+    repository.result = StateError('offline');
+    await tester.runAsync(viewModel.refresh);
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -26,7 +26,6 @@ void main() {
         child: const MaterialApp(home: Scaffold(body: LiveSectionPage())),
       ),
     );
-
     expect(find.text('Unable to refresh camera data'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Retry'), findsOneWidget);
     expect(find.text('No cameras registered'), findsOneWidget);
@@ -36,8 +35,16 @@ void main() {
 class _FakeCameraRepository extends CameraRepository {
   _FakeCameraRepository(this.result) : super(ApiClient());
 
-  Future<List<Camera>> result;
+  Object result;
 
   @override
-  Future<List<Camera>> list() => result;
+  Future<List<Camera>> list() async {
+    final value = result;
+    if (value is List<Camera>) return value;
+    throw value;
+  }
+
+  @override
+  Stream<List<Camera>> runtimeStateUpdates(List<Camera> cameras) =>
+      const Stream.empty();
 }

@@ -42,6 +42,46 @@ test('WHEP POST is abortable', async () => {
   assert.ok(postOptions.signal instanceof AbortSignal);
 });
 
+test('WHEP timeout covers a stalled response body', async () => {
+  const player = new LivePlayer();
+  globalThis.fetch = async (_url, options) => ({
+    ...response(),
+    text: () => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(options.signal.reason));
+    }),
+  });
+
+  await assert.rejects(
+    player.fetchResponseTextWithTimeout('/whep', { method: 'POST' }, 5),
+  );
+});
+
+test('stopping the player aborts an in-flight WHEP request', async () => {
+  const player = new LivePlayer();
+  player.video = null;
+  player.generation = 1;
+  globalThis.RTCPeerConnection = FakePeer;
+
+  let requestSignal;
+  globalThis.fetch = (_url, options) => {
+    requestSignal = options.signal;
+    return new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(options.signal.reason));
+    });
+  };
+
+  const starting = player.startWebRtc('front-door', 1);
+  while (requestSignal == null) await Promise.resolve();
+  player.stop();
+  const settled = await Promise.race([
+    starting.then(() => true, () => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 20)),
+  ]);
+
+  assert.equal(requestSignal.aborted, true);
+  assert.equal(settled, true);
+});
+
 test('a stale WHEP response deletes the server session', async () => {
   const player = new LivePlayer();
   player.video = {};
@@ -88,6 +128,8 @@ class FakePeer {
   }
 
   async setRemoteDescription() {}
+
+  close() {}
 }
 
 function response() {

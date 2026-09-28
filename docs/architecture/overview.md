@@ -59,6 +59,12 @@ Page or widget -> ChangeNotifier ViewModel -> repository -> ApiClient
   and user actions that call repositories belong in a feature ViewModel.
 - Repositories are the data/model seam. Widgets and pages do not call
   `ApiClient` directly.
+- Camera loading publishes configuration immediately, then enriches runtime
+  status in bounded batches. A status endpoint failure is shown as
+  `unavailable` instead of being confused with a confirmed offline camera.
+- ViewModels coordinate reload, pagination, and mutation generations so stale
+  responses cannot overwrite newer user actions. They also ignore async
+  completions after disposal.
 
 For example, the camera settings page coordinates validation and saving, while
 its camera, connection, recording, and motion form sections live as separate

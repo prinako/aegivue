@@ -17,6 +17,7 @@ class EventListViewModel extends ChangeNotifier {
   bool _hasMore = false;
   bool _loadingMore = false;
   int _reloadGeneration = 0;
+  bool _disposed = false;
 
   List<AegivueEvent> get items => _items;
   bool get loading => _loading;
@@ -34,23 +35,23 @@ class EventListViewModel extends ChangeNotifier {
     _loading = true;
     _loadingMore = false;
     _error = null;
-    notifyListeners();
+    _notifyListeners();
     try {
       final page = await _repository.listPage(
         page: 1,
         pageSize: _pageSize,
         kind: 'motion',
       );
-      if (generation != _reloadGeneration) return;
+      if (_disposed || generation != _reloadGeneration) return;
       _applyPage(page);
       _loaded = true;
     } catch (error) {
-      if (generation != _reloadGeneration) return;
+      if (_disposed || generation != _reloadGeneration) return;
       _error = error;
     } finally {
       if (generation == _reloadGeneration) {
         _loading = false;
-        notifyListeners();
+        _notifyListeners();
       }
     }
   }
@@ -66,14 +67,14 @@ class EventListViewModel extends ChangeNotifier {
     final generation = _reloadGeneration;
     _loadingMore = true;
     _error = null;
-    notifyListeners();
+    _notifyListeners();
     try {
       final nextPage = await _repository.listPage(
         page: _page + 1,
         pageSize: _pageSize,
         kind: 'motion',
       );
-      if (generation != _reloadGeneration) return;
+      if (_disposed || generation != _reloadGeneration) return;
       final existingIds = _items.map((item) => item.id).toSet();
       _items = List<AegivueEvent>.unmodifiable([
         ..._items,
@@ -82,13 +83,24 @@ class EventListViewModel extends ChangeNotifier {
       _page = nextPage.page;
       _hasMore = nextPage.hasMore;
     } catch (error) {
-      if (generation != _reloadGeneration) return;
+      if (_disposed || generation != _reloadGeneration) return;
       _error = error;
     } finally {
       if (generation == _reloadGeneration) {
         _loadingMore = false;
-        notifyListeners();
+        _notifyListeners();
       }
     }
+  }
+
+  void _notifyListeners() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _reloadGeneration++;
+    super.dispose();
   }
 }

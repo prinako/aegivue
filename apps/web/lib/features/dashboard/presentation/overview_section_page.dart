@@ -53,6 +53,7 @@ class OverviewSectionPage extends StatelessWidget {
           child: DashboardOverview(
             cameras: cameras.items,
             recordings: recordings.items,
+            recordingCount: recordings.totalItems,
             onAdd: () => _openCamera(context),
             onEdit: (camera) => _openCamera(context, camera),
             onRefresh: () => _refresh(context),

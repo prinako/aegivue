@@ -54,7 +54,6 @@ class ApiClient {
   }
 
   String? _message(Object? data) {
-    if (data is Map<String, Object?>) return data['message'] as String?;
     if (data is Map) return data['message']?.toString();
     return null;
   }

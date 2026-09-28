@@ -12,6 +12,7 @@ class CameraEditorViewModel extends ChangeNotifier {
   bool _saving = false;
   Object? _error;
   Camera? _savedCamera;
+  bool _disposed = false;
 
   bool get saving => _saving;
   Object? get error => _error;
@@ -22,7 +23,7 @@ class CameraEditorViewModel extends ChangeNotifier {
     _saving = true;
     _error = null;
     _savedCamera = null;
-    notifyListeners();
+    _notifyListeners();
 
     try {
       _savedCamera = editing
@@ -34,7 +35,17 @@ class CameraEditorViewModel extends ChangeNotifier {
       return false;
     } finally {
       _saving = false;
-      notifyListeners();
+      _notifyListeners();
     }
+  }
+
+  void _notifyListeners() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }

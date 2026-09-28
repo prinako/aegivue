@@ -60,6 +60,18 @@ void main() {
     expect(viewModel.items.single.id, 'new');
   });
 
+  test('a pending load completes safely after disposal', () async {
+    final pending = Completer<EventPage>();
+    final repository = _FakeEventRepository()..pages[1] = pending.future;
+    final viewModel = EventListViewModel(repository);
+
+    final loading = viewModel.load();
+    viewModel.dispose();
+    pending.complete(_page(1, [_event('event-1')]));
+
+    await expectLater(loading, completes);
+  });
+
   test('refresh invalidates an in-flight pagination response', () async {
     final nextPage = Completer<EventPage>();
     final repository = _FakeEventRepository()
