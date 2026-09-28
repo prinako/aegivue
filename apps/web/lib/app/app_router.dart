@@ -1,13 +1,13 @@
 import 'package:aegivue/features/cameras/data/camera_repository.dart';
 import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:aegivue/features/cameras/presentation/camera_settings_page.dart';
+import 'package:aegivue/features/cameras/presentation/live_section_page.dart';
 import 'package:aegivue/features/cameras/presentation/view_models/camera_editor_view_model.dart';
 import 'package:aegivue/features/cameras/presentation/view_models/camera_list_view_model.dart';
 import 'package:aegivue/features/dashboard/presentation/dashboard_page.dart';
-import 'package:aegivue/features/dashboard/presentation/events_section_page.dart';
-import 'package:aegivue/features/dashboard/presentation/live_section_page.dart';
 import 'package:aegivue/features/dashboard/presentation/overview_section_page.dart';
-import 'package:aegivue/features/dashboard/presentation/recordings_section_page.dart';
+import 'package:aegivue/features/events/presentation/events_section_page.dart';
+import 'package:aegivue/features/recordings/presentation/recordings_section_page.dart';
 import 'package:aegivue/shared/widgets/app_error_state_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';

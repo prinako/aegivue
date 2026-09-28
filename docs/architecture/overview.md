@@ -50,6 +50,9 @@ Page or widget -> ChangeNotifier ViewModel -> repository -> ApiClient
 - Pages own routing, form submission, and screen-level orchestration. Keep them
   lean by extracting substantial visual sections into the feature's
   `presentation/widgets` directory.
+- Route section pages that present one feature live in that feature's
+  `presentation` directory. The dashboard feature owns only the navigation shell
+  and cross-feature overview composition.
 - Each extracted public widget belongs in its own Dart file. Its private
   `State` class and small private rendering helpers stay with that widget.
 - UI-only state can remain local to a widget. Async loading, errors, results,
