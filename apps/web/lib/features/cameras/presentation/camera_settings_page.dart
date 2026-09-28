@@ -1,5 +1,6 @@
 import 'package:aegivue/core/api/api_exception.dart';
 import 'package:aegivue/features/cameras/domain/camera.dart';
+import 'package:aegivue/features/cameras/domain/camera_configuration.dart';
 import 'package:aegivue/features/cameras/presentation/view_models/camera_editor_view_model.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
