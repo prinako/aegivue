@@ -33,6 +33,7 @@ install_skills() {
 
 # Flutter and Dart web development.
 install_skills https://github.com/flutter/agent-plugins \
+  flutter-apply-architecture-best-practices \
   flutter-setup-declarative-routing \
   dart-run-static-analysis
 

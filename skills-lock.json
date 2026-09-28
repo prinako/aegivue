@@ -31,6 +31,12 @@
       "skillPath": "skills/ffmpeg/SKILL.md",
       "computedHash": "71899a72e998da628fa83169446c57be7ec189aa5c474258e658067d9d0521ab"
     },
+    "flutter-apply-architecture-best-practices": {
+      "source": "flutter/agent-plugins",
+      "sourceType": "github",
+      "skillPath": "skills/flutter-apply-architecture-best-practices/SKILL.md",
+      "computedHash": "2b1b63214d6b153c50aacd4bbcb76ce91dece449de9e06f477f8aad3163d667f"
+    },
     "flutter-setup-declarative-routing": {
       "source": "flutter/agent-plugins",
       "sourceType": "github",

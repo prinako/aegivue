@@ -14,6 +14,7 @@ class RecordingLibrary extends StatefulWidget {
     required this.onSetExpiry,
     required this.hasMore,
     required this.loadingMore,
+    required this.updatingExpiry,
   });
 
   final List<Recording> recordings;
@@ -23,6 +24,7 @@ class RecordingLibrary extends StatefulWidget {
   onSetExpiry;
   final bool hasMore;
   final bool loadingMore;
+  final bool updatingExpiry;
 
   @override
   State<RecordingLibrary> createState() => _RecordingLibraryState();
@@ -68,6 +70,7 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
   }
 
   Future<void> _setExpiry(Recording recording) async {
+    if (widget.updatingExpiry) return;
     if (recording.protected) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Protected recordings cannot expire.')),
@@ -185,6 +188,7 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
               recording: selected!,
               onSetExpiry: () => _setExpiry(selected!),
               onClose: () => setState(() => selected = null),
+              updatingExpiry: widget.updatingExpiry,
             ),
           ],
           const SizedBox(height: 20),
@@ -216,11 +220,13 @@ class _SelectedRecording extends StatelessWidget {
     required this.recording,
     required this.onSetExpiry,
     required this.onClose,
+    required this.updatingExpiry,
   });
 
   final Recording recording;
   final VoidCallback onSetExpiry;
   final VoidCallback onClose;
+  final bool updatingExpiry;
 
   @override
   Widget build(BuildContext context) {
@@ -257,12 +263,17 @@ class _SelectedRecording extends StatelessWidget {
                   tooltip: recording.expiresAt == null
                       ? 'Set expiry date'
                       : 'Change expiry date',
-                  onPressed: onSetExpiry,
-                  icon: Icon(
-                    recording.expiresAt == null
-                        ? Icons.event_available_outlined
-                        : Icons.event_busy_outlined,
-                  ),
+                  onPressed: updatingExpiry ? null : onSetExpiry,
+                  icon: updatingExpiry
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          recording.expiresAt == null
+                              ? Icons.event_available_outlined
+                              : Icons.event_busy_outlined,
+                        ),
                 ),
                 IconButton(
                   tooltip: 'Download recording',

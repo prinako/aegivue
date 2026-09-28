@@ -1,11 +1,11 @@
-import 'package:aegivue/features/cameras/camera_controller.dart';
 import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:aegivue/features/cameras/presentation/live_view_page.dart';
+import 'package:aegivue/features/cameras/presentation/view_models/camera_list_view_model.dart';
 import 'package:aegivue/features/dashboard/presentation/widgets/dashboard_overview.dart';
-import 'package:aegivue/features/events/event_controller.dart';
 import 'package:aegivue/features/events/presentation/motion_events_page.dart';
+import 'package:aegivue/features/events/presentation/view_models/event_list_view_model.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_library.dart';
-import 'package:aegivue/features/recordings/recording_controller.dart';
+import 'package:aegivue/features/recordings/presentation/view_models/recording_list_view_model.dart';
 import 'package:aegivue/shared/widgets/app_error_state_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -18,20 +18,20 @@ class OverviewSectionPage extends StatelessWidget {
     final location = camera == null ? '/cameras/new' : '/cameras/${camera.id}';
     final changed = await context.push<bool>(location);
     if (!context.mounted || changed != true) return;
-    await context.read<CameraController>().refresh();
+    await context.read<CameraListViewModel>().refresh();
   }
 
   Future<void> _refresh(BuildContext context) async {
     await Future.wait([
-      context.read<CameraController>().refresh(),
-      context.read<RecordingController>().refresh(),
+      context.read<CameraListViewModel>().refresh(),
+      context.read<RecordingListViewModel>().refresh(),
     ]);
   }
 
   @override
   Widget build(BuildContext context) {
-    final cameras = context.watch<CameraController>();
-    final recordings = context.watch<RecordingController>();
+    final cameras = context.watch<CameraListViewModel>();
+    final recordings = context.watch<RecordingListViewModel>();
     if ((cameras.loading && !cameras.loaded) ||
         (recordings.loading && !recordings.loaded)) {
       return const Center(child: CircularProgressIndicator());
@@ -57,7 +57,7 @@ class LiveSectionPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cameras = context.watch<CameraController>();
+    final cameras = context.watch<CameraListViewModel>();
     if (cameras.loading && !cameras.loaded) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -73,7 +73,7 @@ class RecordingsSectionPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final recordings = context.watch<RecordingController>();
+    final recordings = context.watch<RecordingListViewModel>();
     if (recordings.loading && !recordings.loaded) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -87,6 +87,7 @@ class RecordingsSectionPage extends StatelessWidget {
       onSetExpiry: recordings.setExpiry,
       hasMore: recordings.hasMore,
       loadingMore: recordings.loadingMore,
+      updatingExpiry: recordings.updatingExpiry,
     );
   }
 }
@@ -96,7 +97,7 @@ class EventsSectionPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final events = context.watch<EventController>();
+    final events = context.watch<EventListViewModel>();
     if (events.loading && !events.loaded) {
       return const Center(child: CircularProgressIndicator());
     }
