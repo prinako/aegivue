@@ -1,6 +1,7 @@
 import 'package:aegivue/core/api/api_client.dart';
 import 'package:aegivue/core/api/api_endpoints.dart';
 import 'package:aegivue/features/cameras/domain/camera.dart';
+import 'package:aegivue/features/cameras/domain/camera_configuration.dart';
 
 class CameraRepository {
   const CameraRepository(this.api);

@@ -1,5 +1,6 @@
 import 'package:aegivue/core/api/api_exception.dart';
 import 'package:aegivue/features/cameras/domain/camera.dart';
+import 'package:aegivue/features/cameras/domain/camera_configuration.dart';
 import 'package:aegivue/features/cameras/presentation/view_models/camera_editor_view_model.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -43,6 +44,11 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
   void initState() {
     super.initState();
     final camera = widget.camera;
+    _initializeTextControllers(camera);
+    _initializeConfigurationFields(camera);
+  }
+
+  void _initializeTextControllers(Camera? camera) {
     _id = TextEditingController(text: camera?.id ?? '');
     _name = TextEditingController(text: camera?.name ?? '');
     _host = TextEditingController(text: camera?.connection.host ?? '');
@@ -65,6 +71,9 @@ class _CameraSettingsPageState extends State<CameraSettingsPage> {
       text: camera?.recording.retentionDays?.toString() ?? '',
     );
     _motionFps = TextEditingController(text: '${camera?.motion.fps ?? 5}');
+  }
+
+  void _initializeConfigurationFields(Camera? camera) {
     _enabled = camera?.enabled ?? true;
     _recordingEnabled = camera?.recording.enabled ?? true;
     _recordingMode = camera?.recording.mode ?? 'continuous';

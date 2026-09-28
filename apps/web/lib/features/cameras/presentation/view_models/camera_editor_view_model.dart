@@ -1,5 +1,6 @@
 import 'package:aegivue/features/cameras/data/camera_repository.dart';
 import 'package:aegivue/features/cameras/domain/camera.dart';
+import 'package:aegivue/features/cameras/domain/camera_configuration.dart';
 import 'package:flutter/foundation.dart';
 
 class CameraEditorViewModel extends ChangeNotifier {
