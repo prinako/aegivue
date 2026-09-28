@@ -3,6 +3,7 @@ import 'package:aegivue/features/cameras/presentation/view_models/camera_list_vi
 import 'package:aegivue/features/dashboard/presentation/widgets/dashboard_overview.dart';
 import 'package:aegivue/features/recordings/presentation/view_models/recording_list_view_model.dart';
 import 'package:aegivue/shared/widgets/app_error_state_widget.dart';
+import 'package:aegivue/shared/widgets/app_inline_error_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -38,12 +39,27 @@ class OverviewSectionPage extends StatelessWidget {
     if (recordings.error != null && !recordings.loaded) {
       return AppErrorStateWidget(onRetry: recordings.load);
     }
-    return DashboardOverview(
-      cameras: cameras.items,
-      recordings: recordings.items,
-      onAdd: () => _openCamera(context),
-      onEdit: (camera) => _openCamera(context, camera),
-      onRefresh: () => _refresh(context),
+    return Column(
+      children: [
+        if (cameras.error != null || recordings.error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+            child: AppInlineErrorWidget(
+              message: 'Unable to refresh dashboard data',
+              onRetry: () => _refresh(context),
+            ),
+          ),
+        Expanded(
+          child: DashboardOverview(
+            cameras: cameras.items,
+            recordings: recordings.items,
+            recordingCount: recordings.totalItems,
+            onAdd: () => _openCamera(context),
+            onEdit: (camera) => _openCamera(context, camera),
+            onRefresh: () => _refresh(context),
+          ),
+        ),
+      ],
     );
   }
 }

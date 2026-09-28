@@ -11,6 +11,7 @@ class DashboardOverview extends StatelessWidget {
     super.key,
     required this.cameras,
     required this.recordings,
+    required this.recordingCount,
     required this.onAdd,
     required this.onEdit,
     required this.onRefresh,
@@ -18,6 +19,7 @@ class DashboardOverview extends StatelessWidget {
 
   final List<Camera> cameras;
   final List<Recording> recordings;
+  final int recordingCount;
   final VoidCallback onAdd;
   final ValueChanged<Camera> onEdit;
   final Future<void> Function() onRefresh;
@@ -43,7 +45,7 @@ class DashboardOverview extends StatelessWidget {
             cameras: cameras.length,
             online: online,
             recording: recording,
-            clips: recordings.length,
+            clips: recordingCount,
           ),
           const SizedBox(height: 30),
           DashboardCameraGrid(cameras: cameras, onAdd: onAdd, onEdit: onEdit),

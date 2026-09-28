@@ -18,6 +18,10 @@ class RecordingListViewModel extends ChangeNotifier {
   bool _loadingMore = false;
   bool _updatingExpiry = false;
   Object? _expiryError;
+  int _reloadGeneration = 0;
+  int _totalItems = 0;
+  Future<void>? _expiryOperation;
+  bool _disposed = false;
 
   List<Recording> get items => _items;
   bool get loading => _loading;
@@ -27,26 +31,40 @@ class RecordingListViewModel extends ChangeNotifier {
   bool get loadingMore => _loadingMore;
   bool get updatingExpiry => _updatingExpiry;
   Object? get expiryError => _expiryError;
+  int get totalItems => _totalItems;
 
-  Future<void> load() => _reload(showLoading: !_loaded);
+  Future<void> load() => _reload();
 
-  Future<void> refresh() => _reload(showLoading: false);
+  Future<void> refresh() => _reload();
 
-  Future<void> _reload({required bool showLoading}) async {
-    if (showLoading) {
-      _loading = true;
-      notifyListeners();
+  Future<void> _reload() async {
+    final expiryOperation = _expiryOperation;
+    if (expiryOperation != null) {
+      try {
+        await expiryOperation;
+      } catch (_) {
+        // A list reload still provides useful recovery after a failed update.
+      }
     }
+    if (_disposed) return;
+    final generation = ++_reloadGeneration;
+    _loading = true;
+    _loadingMore = false;
     _error = null;
+    _notifyListeners();
     try {
       final page = await _repository.listPage(page: 1, pageSize: _pageSize);
+      if (_disposed || generation != _reloadGeneration) return;
       _applyPage(page);
       _loaded = true;
     } catch (error) {
+      if (_disposed || generation != _reloadGeneration) return;
       _error = error;
     } finally {
-      _loading = false;
-      notifyListeners();
+      if (generation == _reloadGeneration) {
+        _loading = false;
+        _notifyListeners();
+      }
     }
   }
 
@@ -54,18 +72,21 @@ class RecordingListViewModel extends ChangeNotifier {
     _items = List<Recording>.unmodifiable(page.items);
     _page = page.page;
     _hasMore = page.hasMore;
+    _totalItems = page.totalItems;
   }
 
   Future<void> loadMore() async {
-    if (_loadingMore || !_hasMore) return;
+    if (_loading || _loadingMore || !_hasMore) return;
+    final generation = _reloadGeneration;
     _loadingMore = true;
     _error = null;
-    notifyListeners();
+    _notifyListeners();
     try {
       final nextPage = await _repository.listPage(
         page: _page + 1,
         pageSize: _pageSize,
       );
+      if (_disposed || generation != _reloadGeneration) return;
       final existingIds = _items.map((item) => item.id).toSet();
       _items = List<Recording>.unmodifiable([
         ..._items,
@@ -73,19 +94,33 @@ class RecordingListViewModel extends ChangeNotifier {
       ]);
       _page = nextPage.page;
       _hasMore = nextPage.hasMore;
+      _totalItems = nextPage.totalItems;
     } catch (error) {
+      if (_disposed || generation != _reloadGeneration) return;
       _error = error;
     } finally {
-      _loadingMore = false;
-      notifyListeners();
+      if (generation == _reloadGeneration) {
+        _loadingMore = false;
+        _notifyListeners();
+      }
     }
   }
 
-  Future<void> setExpiry(Recording recording, DateTime? expiresAt) async {
-    if (_updatingExpiry) return;
+  Future<void> setExpiry(Recording recording, DateTime? expiresAt) {
+    final currentOperation = _expiryOperation;
+    if (currentOperation != null) return currentOperation;
+    final operation = _setExpiry(recording, expiresAt);
+    _expiryOperation = operation;
+    return operation;
+  }
+
+  Future<void> _setExpiry(Recording recording, DateTime? expiresAt) async {
+    ++_reloadGeneration;
+    _loading = false;
+    _loadingMore = false;
     _updatingExpiry = true;
     _expiryError = null;
-    notifyListeners();
+    _notifyListeners();
 
     try {
       final updated = await _repository.setExpiry(recording.id, expiresAt);
@@ -99,8 +134,20 @@ class RecordingListViewModel extends ChangeNotifier {
       _expiryError = error;
       rethrow;
     } finally {
+      _expiryOperation = null;
       _updatingExpiry = false;
-      notifyListeners();
+      _notifyListeners();
     }
+  }
+
+  void _notifyListeners() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _reloadGeneration++;
+    super.dispose();
   }
 }
