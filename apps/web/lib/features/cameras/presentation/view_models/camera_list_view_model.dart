@@ -11,6 +11,8 @@ class CameraListViewModel extends ChangeNotifier {
   bool _loading = false;
   bool _loaded = false;
   Object? _error;
+  int _reloadGeneration = 0;
+  bool _disposed = false;
 
   List<Camera> get items => _items;
   bool get loading => _loading;
@@ -29,21 +31,34 @@ class CameraListViewModel extends ChangeNotifier {
   Future<void> refresh() => _reload(showLoading: false);
 
   Future<void> _reload({required bool showLoading}) async {
+    final generation = ++_reloadGeneration;
     if (showLoading) {
       _loading = true;
-      notifyListeners();
+      _notifyListeners();
     }
     _error = null;
 
     try {
       final cameras = await _repository.list();
+      if (_disposed || generation != _reloadGeneration) return;
       _items = List<Camera>.unmodifiable(cameras);
       _loaded = true;
+      _loading = false;
+      _notifyListeners();
+
+      await for (final cameras in _repository.runtimeStateUpdates(_items)) {
+        if (_disposed || generation != _reloadGeneration) return;
+        _items = List<Camera>.unmodifiable(cameras);
+        _notifyListeners();
+      }
     } catch (error) {
+      if (_disposed || generation != _reloadGeneration) return;
       _error = error;
     } finally {
-      _loading = false;
-      notifyListeners();
+      if (generation == _reloadGeneration) {
+        _loading = false;
+        _notifyListeners();
+      }
     }
   }
 
@@ -68,6 +83,17 @@ class CameraListViewModel extends ChangeNotifier {
     }
     items.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     _items = List<Camera>.unmodifiable(items);
-    notifyListeners();
+    _notifyListeners();
+  }
+
+  void _notifyListeners() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _reloadGeneration++;
+    super.dispose();
   }
 }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class AppHeaderWidget extends StatelessWidget {
+class AppHeaderWidget extends StatefulWidget {
   const AppHeaderWidget({
     super.key,
     required this.title,
@@ -11,6 +11,23 @@ class AppHeaderWidget extends StatelessWidget {
   final String title;
   final Future<void> Function() onRefresh;
   final VoidCallback? onAdd;
+
+  @override
+  State<AppHeaderWidget> createState() => _AppHeaderWidgetState();
+}
+
+class _AppHeaderWidgetState extends State<AppHeaderWidget> {
+  bool _refreshing = false;
+
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      await widget.onRefresh();
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +47,7 @@ class AppHeaderWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  widget.title,
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
@@ -44,13 +61,18 @@ class AppHeaderWidget extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'Refresh',
-            onPressed: onRefresh,
-            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _refreshing ? null : _refresh,
+            icon: _refreshing
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded),
           ),
-          if (onAdd != null) ...[
+          if (widget.onAdd != null) ...[
             const SizedBox(width: 8),
             FilledButton.icon(
-              onPressed: onAdd,
+              onPressed: widget.onAdd,
               icon: const Icon(Icons.add_rounded),
               label: const Text('Add camera'),
             ),

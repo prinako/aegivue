@@ -18,12 +18,20 @@ class DashboardPage extends StatelessWidget {
     await context.read<CameraListViewModel>().refresh();
   }
 
-  Future<void> _refreshAll(BuildContext context) async {
-    await Future.wait([
-      context.read<CameraListViewModel>().refresh(),
-      context.read<RecordingListViewModel>().refresh(),
-      context.read<EventListViewModel>().refresh(),
-    ]);
+  Future<void> _refreshSection(BuildContext context, int section) async {
+    switch (section) {
+      case 0:
+        await Future.wait([
+          context.read<CameraListViewModel>().refresh(),
+          context.read<RecordingListViewModel>().refresh(),
+        ]);
+      case 1:
+        await context.read<CameraListViewModel>().refresh();
+      case 2:
+        await context.read<RecordingListViewModel>().refresh();
+      case 3:
+        await context.read<EventListViewModel>().refresh();
+    }
   }
 
   @override
@@ -43,7 +51,7 @@ class DashboardPage extends StatelessWidget {
                     children: [
                       AppHeaderWidget(
                         title: _titleForSection(section),
-                        onRefresh: () => _refreshAll(context),
+                        onRefresh: () => _refreshSection(context, section),
                         onAdd: section <= 1 ? () => _addCamera(context) : null,
                       ),
                       Expanded(child: navigationShell),

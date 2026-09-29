@@ -4,7 +4,12 @@ import 'package:aegivue/core/api/api_exception.dart';
 import 'package:dio/dio.dart';
 
 class ApiClient {
-  ApiClient({Dio? client, this.baseUrl = ''}) : _client = client ?? Dio();
+  ApiClient({Dio? client, this.baseUrl = ''}) : _client = client ?? Dio() {
+    _client.options
+      ..connectTimeout ??= const Duration(seconds: 10)
+      ..receiveTimeout ??= const Duration(seconds: 30)
+      ..sendTimeout ??= const Duration(seconds: 10);
+  }
 
   final Dio _client;
   final String baseUrl;
@@ -49,7 +54,6 @@ class ApiClient {
   }
 
   String? _message(Object? data) {
-    if (data is Map<String, Object?>) return data['message'] as String?;
     if (data is Map) return data['message']?.toString();
     return null;
   }

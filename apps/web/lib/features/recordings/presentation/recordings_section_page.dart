@@ -1,6 +1,7 @@
 import 'package:aegivue/features/recordings/presentation/view_models/recording_list_view_model.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_library.dart';
 import 'package:aegivue/shared/widgets/app_error_state_widget.dart';
+import 'package:aegivue/shared/widgets/app_inline_error_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -16,14 +17,28 @@ class RecordingsSectionPage extends StatelessWidget {
     if (recordings.error != null && !recordings.loaded) {
       return AppErrorStateWidget(onRetry: recordings.load);
     }
-    return RecordingLibrary(
-      recordings: recordings.items,
-      onRefresh: recordings.refresh,
-      onLoadMore: recordings.loadMore,
-      onSetExpiry: recordings.setExpiry,
-      hasMore: recordings.hasMore,
-      loadingMore: recordings.loadingMore,
-      updatingExpiry: recordings.updatingExpiry,
+    return Column(
+      children: [
+        if (recordings.error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+            child: AppInlineErrorWidget(
+              message: 'Unable to refresh recordings',
+              onRetry: recordings.refresh,
+            ),
+          ),
+        Expanded(
+          child: RecordingLibrary(
+            recordings: recordings.items,
+            onRefresh: recordings.refresh,
+            onLoadMore: recordings.loadMore,
+            onSetExpiry: recordings.setExpiry,
+            hasMore: recordings.hasMore,
+            loadingMore: recordings.loadingMore,
+            updatingExpiry: recordings.updatingExpiry,
+          ),
+        ),
+      ],
     );
   }
 }

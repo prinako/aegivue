@@ -78,6 +78,35 @@ void main() {
       expect(viewModel.error, same(failure));
     });
 
+    test('an older load cannot overwrite a newer refresh', () async {
+      final first = Completer<List<Camera>>();
+      final repository = _FakeCameraRepository(listResult: first.future);
+      final viewModel = CameraListViewModel(repository);
+
+      final initialLoad = viewModel.load();
+      repository.listResult = Future.value([
+        _camera(id: 'new-camera', name: 'New camera'),
+      ]);
+      await viewModel.refresh();
+      first.complete([_camera(id: 'old-camera', name: 'Old camera')]);
+      await initialLoad;
+
+      expect(viewModel.items.single.id, 'new-camera');
+    });
+
+    test('a pending load completes safely after disposal', () async {
+      final pending = Completer<List<Camera>>();
+      final viewModel = CameraListViewModel(
+        _FakeCameraRepository(listResult: pending.future),
+      );
+
+      final loading = viewModel.load();
+      viewModel.dispose();
+      pending.complete([_camera()]);
+
+      await expectLater(loading, completes);
+    });
+
     test(
       'upsert replaces a camera while preserving its runtime state',
       () async {
@@ -145,6 +174,39 @@ void main() {
       expect(viewModel.error, same(failure));
       expect(viewModel.savedCamera, isNull);
     });
+
+    test('ignores a second save while the first save is pending', () async {
+      final pending = Completer<Camera>();
+      final repository = _FakeCameraRepository(
+        listResult: Future.value(const []),
+        createResult: pending.future,
+      );
+      final viewModel = CameraEditorViewModel(repository);
+
+      final firstSave = viewModel.save(_configuration());
+      final secondSave = viewModel.save(_configuration());
+
+      expect(repository.createCalls, 1);
+      expect(await secondSave, isFalse);
+      pending.complete(_camera());
+      expect(await firstSave, isTrue);
+    });
+
+    test('completes a pending save safely after disposal', () async {
+      final pending = Completer<Camera>();
+      final viewModel = CameraEditorViewModel(
+        _FakeCameraRepository(
+          listResult: Future.value(const []),
+          createResult: pending.future,
+        ),
+      );
+
+      final saving = viewModel.save(_configuration());
+      viewModel.dispose();
+      pending.complete(_camera());
+
+      await expectLater(saving, completion(isTrue));
+    });
   });
 }
 
@@ -163,6 +225,10 @@ class _FakeCameraRepository extends CameraRepository {
 
   @override
   Future<List<Camera>> list() => listResult;
+
+  @override
+  Stream<List<Camera>> runtimeStateUpdates(List<Camera> cameras) =>
+      const Stream.empty();
 
   @override
   Future<Camera> create(CameraConfiguration configuration) {

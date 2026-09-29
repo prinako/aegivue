@@ -49,6 +49,63 @@ void main() {
     expect(viewModel.items.map((item) => item.id), ['new']);
   });
 
+  test('exposes the server total independently of loaded items', () async {
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(
+        _page(1, [_recording('one')], totalItems: 42, totalPages: 2),
+      );
+    final viewModel = RecordingListViewModel(repository);
+
+    await viewModel.load();
+
+    expect(viewModel.totalItems, 42);
+  });
+
+  test('an older load cannot overwrite a newer refresh', () async {
+    final first = Completer<RecordingPage>();
+    final repository = _FakeRecordingRepository()..pages[1] = first.future;
+    final viewModel = RecordingListViewModel(repository);
+
+    final initialLoad = viewModel.load();
+    repository.pages[1] = Future.value(_page(1, [_recording('new')]));
+    await viewModel.refresh();
+    first.complete(_page(1, [_recording('old')]));
+    await initialLoad;
+
+    expect(viewModel.items.single.id, 'new');
+  });
+
+  test('a pending load completes safely after disposal', () async {
+    final pending = Completer<RecordingPage>();
+    final repository = _FakeRecordingRepository()..pages[1] = pending.future;
+    final viewModel = RecordingListViewModel(repository);
+
+    final loading = viewModel.load();
+    viewModel.dispose();
+    pending.complete(_page(1, [_recording('recording-1')]));
+
+    await expectLater(loading, completes);
+  });
+
+  test('refresh invalidates an in-flight pagination response', () async {
+    final nextPage = Completer<RecordingPage>();
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(
+        _page(1, [_recording('old-first')], totalPages: 2),
+      )
+      ..pages[2] = nextPage.future;
+    final viewModel = RecordingListViewModel(repository);
+    await viewModel.load();
+
+    final pagination = viewModel.loadMore();
+    repository.pages[1] = Future.value(_page(1, [_recording('new-first')]));
+    await viewModel.refresh();
+    nextPage.complete(_page(2, [_recording('old-second')], totalPages: 2));
+    await pagination;
+
+    expect(viewModel.items.map((item) => item.id), ['new-first']);
+  });
+
   test('loadMore appends the next page without duplicate recordings', () async {
     final repository = _FakeRecordingRepository()
       ..pages[1] = Future.value(
@@ -101,6 +158,49 @@ void main() {
     expect(viewModel.items.single.expiresAt, expiresAt);
   });
 
+  test('setExpiry invalidates a stale refresh response', () async {
+    final original = _recording('recording-1');
+    final expiresAt = DateTime.utc(2026, 10, 1);
+    final refresh = Completer<RecordingPage>();
+    final repository = _FakeRecordingRepository(
+      expiryResult: Future.value(
+        _recording('recording-1', expiresAt: expiresAt),
+      ),
+    )..pages[1] = Future.value(_page(1, [original]));
+    final viewModel = RecordingListViewModel(repository);
+    await viewModel.load();
+    repository.pages[1] = refresh.future;
+
+    final refreshing = viewModel.refresh();
+    await viewModel.setExpiry(original, expiresAt);
+    refresh.complete(_page(1, [original]));
+    await refreshing;
+
+    expect(viewModel.items.single.expiresAt, expiresAt);
+  });
+
+  test('refresh waits for an in-flight expiry update', () async {
+    final original = _recording('recording-1');
+    final expiresAt = DateTime.utc(2026, 10, 1);
+    final update = Completer<Recording>();
+    final repository = _FakeRecordingRepository(expiryResult: update.future)
+      ..pages[1] = Future.value(_page(1, [original]));
+    final viewModel = RecordingListViewModel(repository);
+    await viewModel.load();
+
+    final updating = viewModel.setExpiry(original, expiresAt);
+    final refreshing = viewModel.refresh();
+    repository.pages[1] = Future.value(
+      _page(1, [_recording('recording-1', expiresAt: expiresAt)]),
+    );
+    update.complete(_recording('recording-1', expiresAt: expiresAt));
+    await updating;
+    await refreshing;
+
+    expect(viewModel.items.single.expiresAt, expiresAt);
+    expect(repository.listCalls, 2);
+  });
+
   test('setExpiry exposes in-progress and failed mutation state', () async {
     final original = _recording('recording-1');
     final pending = Completer<Recording>();
@@ -126,23 +226,30 @@ class _FakeRecordingRepository extends RecordingRepository {
 
   final Map<int, Future<RecordingPage>> pages = {};
   Future<Recording>? expiryResult;
+  int listCalls = 0;
 
   @override
-  Future<RecordingPage> listPage({int page = 1, int pageSize = 25}) =>
-      pages[page]!;
+  Future<RecordingPage> listPage({int page = 1, int pageSize = 25}) {
+    listCalls++;
+    return pages[page]!;
+  }
 
   @override
   Future<Recording> setExpiry(String id, DateTime? expiresAt) => expiryResult!;
 }
 
-RecordingPage _page(int page, List<Recording> items, {int totalPages = 1}) =>
-    RecordingPage(
-      items: items,
-      page: page,
-      pageSize: 25,
-      totalItems: items.length,
-      totalPages: totalPages,
-    );
+RecordingPage _page(
+  int page,
+  List<Recording> items, {
+  int? totalItems,
+  int totalPages = 1,
+}) => RecordingPage(
+  items: items,
+  page: page,
+  pageSize: 25,
+  totalItems: totalItems ?? items.length,
+  totalPages: totalPages,
+);
 
 Recording _recording(String id, {DateTime? expiresAt}) => Recording(
   id: id,
