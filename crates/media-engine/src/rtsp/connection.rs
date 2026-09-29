@@ -25,6 +25,7 @@ pub async fn connect(
     segment_seconds: u64,
 ) -> Result<(Child, Recorder), ConnectionError> {
     let recorder = Recorder::new(config.clone(), storage_path, database, segment_seconds);
+    let _ = recorder.has_received_packets().await;
     let mut child = recorder.start().await?;
     ffmpeg::log_stderr(
         &mut child,

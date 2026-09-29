@@ -9,9 +9,12 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
+const WORKER_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 struct WorkerHandle {
     commands: mpsc::Sender<CameraCommand>,
     status: watch::Receiver<CameraState>,
+    shutdown: CancellationToken,
     task: JoinHandle<()>,
 }
 
@@ -130,13 +133,14 @@ impl CameraManager {
 
         let (tx, rx) = mpsc::channel(8);
         let (status_tx, status_rx) = watch::channel(CameraState::Starting);
+        let worker_shutdown = self.shutdown.child_token();
         let worker = CameraWorker::new(
             camera,
             self.database.clone(),
             self.storage.clone(),
             rx,
             status_tx,
-            self.shutdown.child_token(),
+            worker_shutdown.clone(),
             self.segment_seconds,
             recording_settings.0,
             recording_settings.1,
@@ -150,6 +154,7 @@ impl CameraManager {
             WorkerHandle {
                 commands: tx,
                 status: status_rx,
+                shutdown: worker_shutdown,
                 task,
             },
         );
@@ -163,12 +168,9 @@ impl CameraManager {
         let Some(handle) = self.workers.lock().await.remove(id) else {
             return Ok(CameraState::Disabled);
         };
-        handle
-            .commands
-            .send(CameraCommand::Stop)
-            .await
-            .map_err(|_| "camera worker stopped".to_string())?;
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(10), handle.task).await;
+        handle.shutdown.cancel();
+        let _ = handle.commands.try_send(CameraCommand::Stop);
+        stop_worker_task(handle.task, id).await;
         Ok(CameraState::Disabled)
     }
 
@@ -216,25 +218,34 @@ impl CameraManager {
     }
 
     pub async fn shutdown_workers(&self) {
-        let handles: Vec<_> = self
-            .workers
-            .lock()
-            .await
-            .drain()
-            .map(|(_, handle)| handle)
-            .collect();
-        for handle in &handles {
-            let _ = handle.commands.send(CameraCommand::Stop).await;
+        let handles: Vec<_> = self.workers.lock().await.drain().collect();
+        for (_, handle) in &handles {
+            handle.shutdown.cancel();
+            let _ = handle.commands.try_send(CameraCommand::Stop);
         }
-        for handle in handles {
-            let _ = tokio::time::timeout(std::time::Duration::from_secs(10), handle.task).await;
+        for (camera_id, handle) in handles {
+            stop_worker_task(handle.task, &camera_id).await;
         }
     }
+}
+
+async fn stop_worker_task(mut task: JoinHandle<()>, camera_id: &str) {
+    if tokio::time::timeout(WORKER_SHUTDOWN_TIMEOUT, &mut task)
+        .await
+        .is_ok()
+    {
+        return;
+    }
+
+    tracing::warn!(camera_id, "camera worker shutdown timed out; aborting task");
+    task.abort();
+    let _ = task.await;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::future::pending;
 
     #[tokio::test]
     async fn independent_worker_map_does_not_remove_others() {
@@ -250,6 +261,7 @@ mod tests {
             WorkerHandle {
                 commands: tx1,
                 status: rx1,
+                shutdown: CancellationToken::new(),
                 task: tokio::spawn(async {}),
             },
         );
@@ -258,6 +270,7 @@ mod tests {
             WorkerHandle {
                 commands: tx2,
                 status: rx2,
+                shutdown: CancellationToken::new(),
                 task: tokio::spawn(async {}),
             },
         );
@@ -293,5 +306,43 @@ mod tests {
 
         assert!(Arc::ptr_eq(&one, &one_again));
         assert!(!Arc::ptr_eq(&one, &two));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_aborts_worker_that_ignores_stop() {
+        let manager = CameraManager::new(
+            PgPool::connect_lazy("postgres://localhost/aegivue").unwrap(),
+            PathBuf::from("/tmp/aegivue-test"),
+            CancellationToken::new(),
+            60,
+        );
+        let (commands, receiver) = mpsc::channel(1);
+        let (_, status) = watch::channel(CameraState::Online);
+        let task = tokio::spawn(async move {
+            let _receiver = receiver;
+            pending::<()>().await;
+        });
+        let task_status = task.abort_handle();
+        let worker_shutdown = CancellationToken::new();
+        let shutdown_status = worker_shutdown.clone();
+        manager.workers.lock().await.insert(
+            "stuck".into(),
+            WorkerHandle {
+                commands,
+                status,
+                shutdown: worker_shutdown,
+                task,
+            },
+        );
+
+        let shutdown = tokio::spawn({
+            let manager = manager.clone();
+            async move { manager.shutdown_workers().await }
+        });
+        tokio::time::advance(std::time::Duration::from_secs(11)).await;
+        shutdown.await.unwrap();
+
+        assert!(shutdown_status.is_cancelled());
+        assert!(task_status.is_finished());
     }
 }

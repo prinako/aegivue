@@ -17,3 +17,6 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
 aegivue-common = { path = "../aegivue-common" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
