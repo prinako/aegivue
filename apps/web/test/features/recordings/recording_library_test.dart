@@ -7,6 +7,76 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('opens a recording in a dialog', (tester) async {
+    final recording = Recording(
+      id: 'recording-1',
+      cameraId: 'front-door',
+      startTime: DateTime.now(),
+      container: 'mp4',
+      playbackUrl: '/recording.mp4',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RecordingLibrary(
+            recordings: [recording],
+            onRefresh: () async {},
+            onLoadMore: () async {},
+            onSetExpiry: (_, _) async {},
+            hasMore: false,
+            loadingMore: false,
+            updatingExpiry: false,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(Dialog), findsNothing);
+    await tester.tap(find.text('front-door'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(find.byTooltip('Close player'), findsOneWidget);
+  });
+
+  testWidgets('disables expiry changes for protected recordings', (
+    tester,
+  ) async {
+    final recording = Recording(
+      id: 'recording-1',
+      cameraId: 'front-door',
+      startTime: DateTime.now(),
+      container: 'mp4',
+      playbackUrl: '/recording.mp4',
+      protected: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RecordingLibrary(
+            recordings: [recording],
+            onRefresh: () async {},
+            onLoadMore: () async {},
+            onSetExpiry: (_, _) async {},
+            hasMore: false,
+            loadingMore: false,
+            updatingExpiry: false,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('front-door'));
+    await tester.pump();
+
+    final button = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.event_available_outlined),
+    );
+    expect(button.onPressed, isNull);
+  });
+
   testWidgets(
     'opens the expiry picker when the current expiry is later today',
     (tester) async {
@@ -37,11 +107,13 @@ void main() {
       );
 
       await tester.tap(find.text('front-door'));
-      await tester.pump();
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Change expiry date'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('Choose expiry date'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(tester.takeException(), isNull);
       expect(find.byType(DatePickerDialog), findsOneWidget);

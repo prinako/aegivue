@@ -8,18 +8,20 @@ class SelectedRecordingCard extends StatelessWidget {
   const SelectedRecordingCard({
     super.key,
     required this.recording,
-    required this.onSetExpiry,
+    this.onSetExpiry,
     required this.onClose,
     required this.updatingExpiry,
   });
 
   final Recording recording;
-  final VoidCallback onSetExpiry;
+  final VoidCallback? onSetExpiry;
   final VoidCallback onClose;
   final bool updatingExpiry;
 
   @override
   Widget build(BuildContext context) {
+    final expiryEnabled =
+        onSetExpiry != null && !updatingExpiry && !recording.protected;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -49,22 +51,21 @@ class SelectedRecordingCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: recording.expiresAt == null
-                      ? 'Set expiry date'
-                      : 'Change expiry date',
-                  onPressed: updatingExpiry ? null : onSetExpiry,
-                  icon: updatingExpiry
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          recording.expiresAt == null
-                              ? Icons.event_available_outlined
-                              : Icons.event_busy_outlined,
-                        ),
-                ),
+                if (onSetExpiry != null)
+                  IconButton(
+                    tooltip: _expiryTooltip(recording),
+                    onPressed: expiryEnabled ? onSetExpiry : null,
+                    icon: updatingExpiry
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            recording.expiresAt == null
+                                ? Icons.event_available_outlined
+                                : Icons.event_busy_outlined,
+                          ),
+                  ),
                 IconButton(
                   tooltip: 'Download recording',
                   onPressed: () => RecordingDownload.start(recording),
@@ -121,6 +122,11 @@ class SelectedRecordingCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _expiryTooltip(Recording recording) {
+  if (recording.protected) return 'Protected recordings cannot expire';
+  return recording.expiresAt == null ? 'Set expiry date' : 'Change expiry date';
 }
 
 class _Detail extends StatelessWidget {
