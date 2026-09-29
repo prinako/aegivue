@@ -20,6 +20,7 @@ class SelectedRecordingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final expiryEnabled = !updatingExpiry && !recording.protected;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -50,10 +51,8 @@ class SelectedRecordingCard extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  tooltip: recording.expiresAt == null
-                      ? 'Set expiry date'
-                      : 'Change expiry date',
-                  onPressed: updatingExpiry ? null : onSetExpiry,
+                  tooltip: _expiryTooltip(recording),
+                  onPressed: expiryEnabled ? onSetExpiry : null,
                   icon: updatingExpiry
                       ? const SizedBox.square(
                           dimension: 18,
@@ -121,6 +120,11 @@ class SelectedRecordingCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _expiryTooltip(Recording recording) {
+  if (recording.protected) return 'Protected recordings cannot expire';
+  return recording.expiresAt == null ? 'Set expiry date' : 'Change expiry date';
 }
 
 class _Detail extends StatelessWidget {

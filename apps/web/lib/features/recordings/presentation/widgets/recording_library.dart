@@ -70,13 +70,12 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
 
   Future<void> _setExpiry(Recording recording) async {
     if (widget.updatingExpiry) return;
-    if (recording.protected) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Protected recordings cannot expire.')),
-      );
-      return;
-    }
+    final selection = await _chooseExpiry(recording);
+    if (!mounted || selection == null) return;
+    await _saveExpiry(recording, selection.expiresAt);
+  }
 
+  Future<_ExpirySelection?> _chooseExpiry(Recording recording) async {
     final action = await showModalBottomSheet<_ExpiryAction>(
       context: context,
       builder: (sheetContext) => RecordingExpirySheet(
@@ -85,60 +84,51 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
         onClear: () => Navigator.of(sheetContext).pop(_ExpiryAction.clear),
       ),
     );
-    if (!mounted || action == null) return;
+    if (!mounted || action == null) return null;
+    if (action == _ExpiryAction.clear) return const _ExpirySelection(null);
 
-    DateTime? expiresAt;
-    if (action == _ExpiryAction.pick) {
-      final now = DateTime.now();
-      final firstDate = DateTime(
-        now.year,
-        now.month,
-        now.day,
-      ).add(const Duration(days: 1));
-      final lastDate = DateTime(now.year + 10, 12, 31);
-      final currentExpiry = recording.expiresAt?.toLocal();
-      final currentDate = currentExpiry == null
-          ? null
-          : DateTime(
-              currentExpiry.year,
-              currentExpiry.month,
-              currentExpiry.day,
-            );
-      final initialDate =
-          currentDate != null &&
-              !currentDate.isBefore(firstDate) &&
-              !currentDate.isAfter(lastDate)
-          ? currentDate
-          : DateTime(now.year, now.month, now.day).add(const Duration(days: 7));
-      final date = await showDatePicker(
-        context: context,
-        initialDate: initialDate,
-        firstDate: firstDate,
-        lastDate: lastDate,
-        helpText: 'Delete recording after',
-      );
-      if (date == null) return;
-      expiresAt = DateTime(date.year, date.month, date.day, 23, 59, 59);
-    }
+    final date = await _pickExpiryDate(recording);
+    if (date == null) return null;
+    return _ExpirySelection(
+      DateTime(date.year, date.month, date.day, 23, 59, 59),
+    );
+  }
 
+  Future<DateTime?> _pickExpiryDate(Recording recording) {
+    final now = DateTime.now();
+    final firstDate = _startOfDay(now).add(const Duration(days: 1));
+    final lastDate = DateTime(now.year + 10, 12, 31);
+    final currentDate = _localDate(recording.expiresAt);
+    final initialDate = _initialExpiryDate(
+      currentDate: currentDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      fallback: _startOfDay(now).add(const Duration(days: 7)),
+    );
+    return showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      helpText: 'Delete recording after',
+    );
+  }
+
+  Future<void> _saveExpiry(Recording recording, DateTime? expiresAt) async {
     try {
       await widget.onSetExpiry(recording, expiresAt);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            expiresAt == null
-                ? 'Recording will now be kept indefinitely.'
-                : 'Recording will expire after ${_formatExpiry(expiresAt)}.',
-          ),
-        ),
-      );
+      _showMessage(_expirySuccessMessage(expiresAt));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to update expiry: $error')),
-      );
+      _showMessage('Unable to update expiry: $error');
     }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -195,6 +185,35 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
 }
 
 enum _ExpiryAction { pick, clear }
+
+class _ExpirySelection {
+  const _ExpirySelection(this.expiresAt);
+
+  final DateTime? expiresAt;
+}
+
+DateTime _startOfDay(DateTime value) =>
+    DateTime(value.year, value.month, value.day);
+
+DateTime? _localDate(DateTime? value) {
+  if (value == null) return null;
+  return _startOfDay(value.toLocal());
+}
+
+DateTime _initialExpiryDate({
+  required DateTime? currentDate,
+  required DateTime firstDate,
+  required DateTime lastDate,
+  required DateTime fallback,
+}) {
+  if (currentDate == null || currentDate.isBefore(firstDate)) return fallback;
+  if (currentDate.isAfter(lastDate)) return fallback;
+  return currentDate;
+}
+
+String _expirySuccessMessage(DateTime? expiresAt) => expiresAt == null
+    ? 'Recording will now be kept indefinitely.'
+    : 'Recording will expire after ${_formatExpiry(expiresAt)}.';
 
 String _formatExpiry(DateTime value) {
   final local = value.toLocal();

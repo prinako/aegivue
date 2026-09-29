@@ -7,6 +7,43 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('disables expiry changes for protected recordings', (
+    tester,
+  ) async {
+    final recording = Recording(
+      id: 'recording-1',
+      cameraId: 'front-door',
+      startTime: DateTime.now(),
+      container: 'mp4',
+      playbackUrl: '/recording.mp4',
+      protected: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RecordingLibrary(
+            recordings: [recording],
+            onRefresh: () async {},
+            onLoadMore: () async {},
+            onSetExpiry: (_, _) async {},
+            hasMore: false,
+            loadingMore: false,
+            updatingExpiry: false,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('front-door'));
+    await tester.pump();
+
+    final button = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.event_available_outlined),
+    );
+    expect(button.onPressed, isNull);
+  });
+
   testWidgets(
     'opens the expiry picker when the current expiry is later today',
     (tester) async {
