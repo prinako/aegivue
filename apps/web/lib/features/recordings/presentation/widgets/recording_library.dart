@@ -1,7 +1,7 @@
 import 'package:aegivue/features/recordings/domain/recording.dart';
+import 'package:aegivue/features/recordings/presentation/widgets/recording_details_dialog.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_expiry_sheet.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_list_widget.dart';
-import 'package:aegivue/features/recordings/presentation/widgets/selected_recording_card.dart';
 import 'package:flutter/material.dart';
 
 class RecordingLibrary extends StatefulWidget {
@@ -31,7 +31,6 @@ class RecordingLibrary extends StatefulWidget {
 
 class _RecordingLibraryState extends State<RecordingLibrary> {
   final ScrollController _scrollController = ScrollController();
-  Recording? selected;
 
   @override
   void initState() {
@@ -47,14 +46,6 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
     super.dispose();
   }
 
-  @override
-  void didUpdateWidget(covariant RecordingLibrary oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (selected == null) return;
-    final matches = widget.recordings.where((item) => item.id == selected!.id);
-    selected = matches.isEmpty ? null : matches.first;
-  }
-
   void _handleScroll() {
     if (!_scrollController.hasClients ||
         widget.loadingMore ||
@@ -68,11 +59,11 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
     }
   }
 
-  Future<void> _setExpiry(Recording recording) async {
-    if (widget.updatingExpiry) return;
+  Future<bool> _setExpiry(Recording recording) async {
+    if (widget.updatingExpiry) return false;
     final selection = await _chooseExpiry(recording);
-    if (!mounted || selection == null) return;
-    await _saveExpiry(recording, selection.expiresAt);
+    if (!mounted || selection == null) return false;
+    return _saveExpiry(recording, selection.expiresAt);
   }
 
   Future<_ExpirySelection?> _chooseExpiry(Recording recording) async {
@@ -114,15 +105,27 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
     );
   }
 
-  Future<void> _saveExpiry(Recording recording, DateTime? expiresAt) async {
+  Future<bool> _saveExpiry(Recording recording, DateTime? expiresAt) async {
     try {
       await widget.onSetExpiry(recording, expiresAt);
-      if (!mounted) return;
+      if (!mounted) return false;
       _showMessage(_expirySuccessMessage(expiresAt));
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       _showMessage('Unable to update expiry: $error');
+      return false;
     }
+  }
+
+  Future<void> _openRecording(Recording recording) {
+    return showDialog<void>(
+      context: context,
+      builder: (_) => RecordingDetailsDialog(
+        recording: recording,
+        onSetExpiry: () => _setExpiry(recording),
+      ),
+    );
   }
 
   void _showMessage(String message) {
@@ -151,20 +154,10 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
             'Browse, preview, download, and control how long finalized footage is retained.',
             style: TextStyle(color: Colors.white54),
           ),
-          if (selected != null) ...[
-            const SizedBox(height: 20),
-            SelectedRecordingCard(
-              recording: selected!,
-              onSetExpiry: () => _setExpiry(selected!),
-              onClose: () => setState(() => selected = null),
-              updatingExpiry: widget.updatingExpiry,
-            ),
-          ],
           const SizedBox(height: 20),
           RecordingListWidget(
             recordings: widget.recordings,
-            selectedId: selected?.id,
-            onOpen: (recording) => setState(() => selected = recording),
+            onOpen: _openRecording,
           ),
           if (widget.loadingMore) ...[
             const SizedBox(height: 24),
