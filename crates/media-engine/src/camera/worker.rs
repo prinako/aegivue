@@ -4,7 +4,7 @@ use crate::{
     recording::{
         motion_event::MotionEventRecorder,
         prebuffer::{self, PreEventBuffer},
-        recorder::CameraConfig,
+        recorder::{self, CameraConfig},
     },
     rtsp,
 };
@@ -68,6 +68,14 @@ impl CameraWorker {
     }
 
     pub async fn run(mut self) {
+        if self.camera.recording_enabled {
+            recorder::recover_in_background(
+                self.camera.clone(),
+                self.storage.clone(),
+                self.database.clone(),
+                self.segment_seconds,
+            );
+        }
         if !self.camera.recording_enabled {
             self.run_live_only().await;
         } else if self.recording_mode == "motion" {

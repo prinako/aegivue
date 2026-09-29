@@ -90,19 +90,19 @@ async fn run_once(
     let mut smoothed_score = 0.0;
     let started = Instant::now();
 
-    loop {
+    let stream_result = loop {
         let read_result = tokio::select! {
             result = stdout.read_exact(&mut current) => Some(result),
             () = shutdown.cancelled() => None,
         };
 
         let Some(read_result) = read_result else {
-            break;
+            break Ok(());
         };
         match read_result {
             Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => break,
-            Err(error) => return Err(error.into()),
+            Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => break Ok(()),
+            Err(error) => break Err(error),
         }
 
         if !have_previous {
@@ -166,7 +166,7 @@ async fn run_once(
                 }
             }
         }
-    }
+    };
 
     if let Some(event_id) = active_event {
         let _ = end_event(database, event_id).await;
@@ -176,6 +176,7 @@ async fn run_once(
     if started.elapsed() >= Duration::from_secs(30) {
         tracing::debug!(camera_id=%camera.id, "motion detector completed a stable run");
     }
+    stream_result?;
     Ok(())
 }
 

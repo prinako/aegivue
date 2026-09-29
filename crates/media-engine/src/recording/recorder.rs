@@ -1,9 +1,14 @@
-use super::paths::{camera_directory, segment_time};
-use chrono::Local;
+use super::{
+    catalog::{CatalogError, RecordingCatalog, RecordingMetadata},
+    paths::{camera_directory, segment_time},
+};
+use chrono::{Local, Utc};
 use sqlx::PgPool;
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     process::Stdio,
+    sync::Arc,
 };
 use thiserror::Error;
 use tokio::{
@@ -74,12 +79,13 @@ pub enum RecorderError {
     Storage(#[from] std::io::Error),
 }
 
+#[derive(Clone)]
 pub struct Recorder {
     camera: CameraConfig,
     storage: PathBuf,
-    database: PgPool,
+    catalog: RecordingCatalog,
     segment_seconds: u64,
-    pending_metadata: Mutex<Vec<PathBuf>>,
+    packet_baseline: Arc<Mutex<Option<HashMap<PathBuf, u64>>>>,
 }
 
 impl Recorder {
@@ -91,10 +97,10 @@ impl Recorder {
     ) -> Self {
         Self {
             camera,
+            catalog: RecordingCatalog::new(database, storage.clone()),
             storage,
-            database,
             segment_seconds,
-            pending_metadata: Mutex::new(Vec::new()),
+            packet_baseline: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -107,8 +113,6 @@ impl Recorder {
             .to_path_buf();
         fs::create_dir_all(&camera_root).await?;
         self.ensure_directories().await?;
-        self.recover_finalized_segments().await;
-
         let pattern = camera_root.join("%Y/%m/%d/%H/%H-%M-%S.mp4.partial");
         let mut command = Command::new("ffmpeg");
         command
@@ -181,7 +185,25 @@ impl Recorder {
     }
 
     async fn partial_files(&self) -> Vec<PathBuf> {
-        self.files_with_suffix(".mp4.partial").await
+        let now = Local::now();
+        let mut files = Vec::new();
+        for at in [now, now - chrono::Duration::hours(1)] {
+            let Ok(directory) = camera_directory(&self.storage, &self.camera.id, at) else {
+                continue;
+            };
+            let Ok(mut entries) = fs::read_dir(directory).await else {
+                continue;
+            };
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                if path.to_string_lossy().ends_with(".mp4.partial") {
+                    files.push(path);
+                }
+            }
+        }
+        files.sort();
+        files.dedup();
+        files
     }
 
     async fn finalized_files(&self) -> Vec<PathBuf> {
@@ -189,15 +211,22 @@ impl Recorder {
     }
 
     pub async fn has_received_packets(&self) -> bool {
+        let mut current = HashMap::new();
         for path in self.partial_files().await {
-            if fs::metadata(path)
-                .await
-                .is_ok_and(|metadata| metadata.len() > 0)
-            {
-                return true;
+            if let Ok(metadata) = fs::metadata(&path).await {
+                current.insert(path, metadata.len());
             }
         }
-        false
+
+        let mut baseline = self.packet_baseline.lock().await;
+        let Some(initial) = baseline.as_ref() else {
+            *baseline = Some(current);
+            return false;
+        };
+
+        current
+            .iter()
+            .any(|(path, size)| *size > 0 && *size > initial.get(path).copied().unwrap_or_default())
     }
 
     pub async fn persist_segments(&self, include_latest: bool) {
@@ -205,9 +234,11 @@ impl Recorder {
             tracing::error!(camera_id=%self.camera.id, %error, "unable to prepare current recording directories");
             return;
         }
-        self.retry_pending_metadata().await;
-
-        let mut files = self.partial_files().await;
+        let mut files = if include_latest {
+            self.files_with_suffix(".mp4.partial").await
+        } else {
+            self.partial_files().await
+        };
         if !include_latest {
             files.pop();
         }
@@ -242,8 +273,7 @@ impl Recorder {
             .insert_recording_metadata(&final_path, metadata.len(), start, duration_ms)
             .await
         {
-            tracing::error!(camera_id=%self.camera.id, path=%final_path.display(), %error, "unable to persist finalized segment metadata; queued for retry");
-            self.queue_metadata_retry(final_path).await;
+            tracing::error!(camera_id=%self.camera.id, path=%final_path.display(), %error, "unable to persist finalized segment metadata; durable retry staged");
         }
     }
 
@@ -253,7 +283,7 @@ impl Recorder {
         file_size: u64,
         start: chrono::DateTime<Local>,
         duration_ms: i64,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<(), CatalogError> {
         let end = start + chrono::Duration::milliseconds(duration_ms);
         let expires_at = self
             .camera
@@ -264,46 +294,37 @@ impl Recorder {
             .unwrap_or(final_path)
             .to_string_lossy()
             .into_owned();
-        sqlx::query("INSERT INTO recordings(id,camera_id,start_time,end_time,file_path,file_size,container,duration_ms,expires_at) VALUES($1,$2,$3,$4,$5,$6,'mp4',$7,$8) ON CONFLICT(file_path) DO NOTHING")
-            .bind(Uuid::new_v4())
-            .bind(&self.camera.id)
-            .bind(start)
-            .bind(end)
-            .bind(relative)
-            .bind(file_size as i64)
-            .bind(duration_ms)
-            .bind(expires_at)
-            .execute(&self.database)
-            .await?;
-        Ok(())
-    }
-
-    async fn queue_metadata_retry(&self, path: PathBuf) {
-        let mut pending = self.pending_metadata.lock().await;
-        if !pending.contains(&path) {
-            pending.push(path);
-        }
-    }
-
-    async fn retry_pending_metadata(&self) {
-        let paths = {
-            let mut pending = self.pending_metadata.lock().await;
-            std::mem::take(&mut *pending)
-        };
-        for path in paths {
-            if let Err(error) = self.recover_finalized_file(&path).await {
-                tracing::warn!(camera_id=%self.camera.id, path=%path.display(), %error, "recording metadata retry deferred");
-                self.queue_metadata_retry(path).await;
-            }
-        }
+        self.catalog
+            .persist(&RecordingMetadata {
+                id: Uuid::new_v4(),
+                camera_id: self.camera.id.clone(),
+                event_id: None,
+                start_time: start.with_timezone(&Utc),
+                end_time: end.with_timezone(&Utc),
+                file_path: relative,
+                file_size: file_size as i64,
+                duration_ms,
+                expires_at: expires_at.map(|value| value.with_timezone(&Utc)),
+            })
+            .await
     }
 
     async fn recover_finalized_segments(&self) {
         for path in self.finalized_files().await {
             if let Err(error) = self.recover_finalized_file(&path).await {
                 tracing::warn!(camera_id=%self.camera.id, path=%path.display(), %error, "unable to reconcile finalized recording metadata");
-                self.queue_metadata_retry(path).await;
             }
+            tokio::task::yield_now().await;
+        }
+    }
+
+    async fn recover_stale_partial_segments(&self) {
+        let cutoff = Local::now() - chrono::Duration::hours(2);
+        for path in self.files_with_suffix(".mp4.partial").await {
+            if segment_time(&self.storage, &self.camera.id, &path).is_some_and(|at| at < cutoff) {
+                self.finalize_segment(&path).await;
+            }
+            tokio::task::yield_now().await;
         }
     }
 
@@ -313,13 +334,11 @@ impl Recorder {
             .unwrap_or(path)
             .to_string_lossy()
             .into_owned();
-        let exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM recordings WHERE file_path=$1)",
-        )
-        .bind(&relative)
-        .fetch_one(&self.database)
-        .await
-        .map_err(|error| error.to_string())?;
+        let exists = self
+            .catalog
+            .contains_path(&relative)
+            .await
+            .map_err(|error| error.to_string())?;
         if exists {
             return Ok(());
         }
@@ -342,7 +361,6 @@ impl Recorder {
 
     pub async fn finalize(&self) {
         self.persist_segments(true).await;
-        self.retry_pending_metadata().await;
     }
 
     async fn ensure_directories(&self) -> Result<(), std::io::Error> {
@@ -354,6 +372,19 @@ impl Recorder {
         }
         Ok(())
     }
+}
+
+pub fn recover_in_background(
+    camera: CameraConfig,
+    storage: PathBuf,
+    database: PgPool,
+    segment_seconds: u64,
+) {
+    tokio::spawn(async move {
+        let recorder = Recorder::new(camera, storage, database, segment_seconds);
+        recorder.recover_finalized_segments().await;
+        recorder.recover_stale_partial_segments().await;
+    });
 }
 
 async fn probe_duration_ms(path: &Path) -> Option<i64> {
@@ -383,7 +414,9 @@ async fn probe_duration_ms(path: &Path) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::recording::paths::segment_path;
     use chrono::TimeZone;
+    use tokio::io::AsyncWriteExt;
 
     #[test]
     fn recording_always_uses_main_stream() {
@@ -415,5 +448,46 @@ mod tests {
                 60
             );
         }
+    }
+
+    #[tokio::test]
+    async fn packet_probe_ignores_partial_files_that_predate_connection() {
+        let root = std::env::temp_dir().join(format!("aegivue-probe-{}", Uuid::new_v4()));
+        let current = segment_path(&root, "front-door", Local::now()).unwrap();
+        let partial = PathBuf::from(format!("{}.partial", current.display()));
+        fs::create_dir_all(partial.parent().unwrap()).await.unwrap();
+        fs::write(&partial, b"stale").await.unwrap();
+        let recorder = Recorder::new(
+            CameraConfig {
+                id: "front-door".into(),
+                host: "camera.local".into(),
+                port: 554,
+                username: None,
+                password_secret: None,
+                main_stream: "/main".into(),
+                sub_stream: None,
+                recording_enabled: true,
+                retention_days: None,
+                motion_enabled: false,
+                motion_stream: "sub".into(),
+                motion_fps: 5.0,
+                motion_sensitivity: 0.65,
+            },
+            root.clone(),
+            PgPool::connect_lazy("postgres://localhost/aegivue").unwrap(),
+            60,
+        );
+
+        assert!(!recorder.has_received_packets().await);
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .open(&partial)
+            .await
+            .unwrap();
+        file.write_all(b"new-packets").await.unwrap();
+        file.flush().await.unwrap();
+        assert!(recorder.has_received_packets().await);
+
+        fs::remove_dir_all(root).await.unwrap();
     }
 }
