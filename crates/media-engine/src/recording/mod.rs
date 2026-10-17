@@ -1,3 +1,4 @@
+pub mod catalog;
 pub mod motion_event;
 pub mod paths;
 pub mod prebuffer;

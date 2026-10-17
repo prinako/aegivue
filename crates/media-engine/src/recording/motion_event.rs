@@ -1,5 +1,10 @@
-use super::{paths::segment_path, prebuffer::PreEventBuffer, recorder::CameraConfig};
-use chrono::{DateTime, Local};
+use super::{
+    catalog::{RecordingCatalog, RecordingMetadata},
+    paths::segment_path,
+    prebuffer::PreEventBuffer,
+    recorder::CameraConfig,
+};
+use chrono::{DateTime, Local, Utc};
 use sqlx::PgPool;
 use std::{
     path::{Path, PathBuf},
@@ -14,7 +19,7 @@ use uuid::Uuid;
 pub struct MotionEventRecorder {
     camera: CameraConfig,
     storage: PathBuf,
-    database: PgPool,
+    catalog: RecordingCatalog,
     event_id: Uuid,
     event_started_at: DateTime<Local>,
     work_dir: PathBuf,
@@ -100,8 +105,8 @@ impl MotionEventRecorder {
         Ok((
             Self {
                 camera,
+                catalog: RecordingCatalog::new(database, storage.clone()),
                 storage,
-                database,
                 event_id,
                 event_started_at,
                 work_dir,
@@ -194,21 +199,20 @@ impl MotionEventRecorder {
             .to_string_lossy()
             .into_owned();
 
-        sqlx::query(
-            "INSERT INTO recordings(id,camera_id,event_id,start_time,end_time,file_path,file_size,container,duration_ms,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,'mp4',$8,$9) ON CONFLICT(file_path) DO UPDATE SET event_id=EXCLUDED.event_id,end_time=EXCLUDED.end_time,file_size=EXCLUDED.file_size,duration_ms=EXCLUDED.duration_ms,expires_at=EXCLUDED.expires_at",
-        )
-        .bind(Uuid::new_v4())
-        .bind(&self.camera.id)
-        .bind(self.event_id)
-        .bind(start)
-        .bind(end)
-        .bind(relative)
-        .bind(metadata.len() as i64)
-        .bind(duration_ms)
-        .bind(expires_at)
-        .execute(&self.database)
-        .await
-        .map_err(|error| error.to_string())?;
+        self.catalog
+            .persist(&RecordingMetadata {
+                id: Uuid::new_v4(),
+                camera_id: self.camera.id.clone(),
+                event_id: Some(self.event_id),
+                start_time: start.with_timezone(&Utc),
+                end_time: end.with_timezone(&Utc),
+                file_path: relative,
+                file_size: metadata.len() as i64,
+                duration_ms,
+                expires_at: expires_at.map(|value| value.with_timezone(&Utc)),
+            })
+            .await
+            .map_err(|error| error.to_string())?;
 
         let pre_event_segments = self.pre_segments.len();
         let _ = fs::remove_dir_all(&self.work_dir).await;

@@ -87,8 +87,11 @@ PostgreSQL is the durable desired state. In-memory worker state is disposable.
 1. A camera worker pulls the configured RTSP main stream.
 2. FFmpeg writes an active `.mp4.partial` segment.
 3. A completed, non-empty segment is atomically renamed to `.mp4`.
-4. The media engine probes and indexes the finalized segment in PostgreSQL.
-5. The API serves media with HTTP range support for seeking and playback.
+4. The media engine probes the finalized segment and durably stages its metadata
+   below `.metadata-pending`.
+5. The staged metadata is indexed in PostgreSQL and removed after a successful
+   insert. A background catalog task retries staged entries after database outages.
+6. The API serves media with HTTP range support for seeking and playback.
 
 Back up both PostgreSQL and the recording volume. Either one alone is an
 incomplete backup.

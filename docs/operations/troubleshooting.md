@@ -82,6 +82,8 @@ curl --fail 'http://127.0.0.1:3000/api/v1/recordings?page=1&pageSize=25'
   recording.
 - Files on disk but absent from the API indicate finalization, probing, or database
   indexing failed.
+- JSON files below `.metadata-pending` are durable indexing retries. Keep them with
+  the recording volume; the media engine retries them automatically.
 - Metadata in PostgreSQL but a missing file indicates a storage mount, manual
   deletion, or consistency problem.
 - Immediate disappearance may indicate retention or expiry settings.
@@ -137,8 +139,9 @@ Follow the [upgrade and migration guide](upgrades.md) to restore version alignme
 
 Check available space and mount ownership on the host. For bind-mounted storage,
 the configured `PUID` and `PGID` must be able to create directories, write partial
-segments, rename finalized files, and remove expired recordings. Avoid broad
-permission changes; correct ownership on the specific recording directory.
+segments and metadata sidecars, rename finalized files, and remove expired
+recordings. Avoid broad permission changes; correct ownership on the specific
+recording directory.
 
 ## Escalation checklist
 
