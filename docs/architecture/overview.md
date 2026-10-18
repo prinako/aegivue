@@ -71,6 +71,15 @@ its camera, connection, recording, and motion form sections live as separate
 widgets. A shared presentation form model keeps those widget interfaces small
 without moving text controllers into the domain layer.
 
+The recordings feature follows the same Provider and ChangeNotifier MVVM flow.
+`RecordingListViewModel` owns the active date bounds, pagination state, and
+stale-request generation checks; `RecordingRepository` converts the bounds to
+UTC and requests filtered API pages. Refreshes and subsequent pages retain the
+active filter. The date controls sit outside the scrolling grid, and
+`SliverGrid.builder` constructs recording cards lazily as they enter the
+viewport. Loaded recording metadata can still accumulate as more pages are
+appended.
+
 ## Core data flows
 
 ### Camera reconciliation

@@ -55,8 +55,8 @@ finalized media remains on a dedicated recording volume.
 | --- | --- |
 | Cameras | RTSP main/substream configuration, enable/disable controls, runtime status, automatic worker recovery |
 | Recording | Continuous capture or one assembled MP4 per motion event, atomic finalization, pre/post-event footage |
-| Playback | Static thumbnails, in-browser playback, paginated library, downloads, HTTP range requests, expiry controls |
-| Retention | Per-camera retention, protected recordings, automatic file and metadata cleanup |
+| Playback | Finalized-recording library, date/time filtering, lazy-rendered cards, in-browser playback, downloads, HTTP range requests |
+| Retention | Per-camera expiry, protected-recording cleanup exclusions, automatic file and metadata cleanup |
 | Live view | WebRTC, LL-HLS fallback, substream preference, adaptive camera grid, focused viewer |
 | Motion | Supervised frame-difference detector, configurable stream/FPS/sensitivity, persisted and linked events |
 | Operations | Health checks, structured logs, runtime status, and documented REST endpoints |
@@ -180,7 +180,7 @@ the other sections.
 | --- | --- |
 | `/` | System overview, camera status, and recent recordings |
 | `/live` | Adaptive live-camera grid and focused viewing |
-| `/recordings` | Paginated recording library, playback, retention, and downloads |
+| `/recordings` | Filtered and paginated recording library, playback, retention, and downloads |
 | `/events` | Motion-event timeline and linked recordings |
 | `/cameras/new` | Add a camera |
 | `/cameras/:id` | Edit an existing camera and its recording or motion settings |
@@ -191,6 +191,11 @@ when motion is detected, and assembles the valid buffered footage, active event,
 and configured post-event window into one recording. See
 [Motion and events](docs/motion/events.md) for configuration ranges, failure
 behavior, and current detector limitations.
+
+The recording library browses finalized footage with custom local date/time
+ranges. Filtering and pagination run on the server, while the Flutter grid
+lazily builds visible cards. See the [recordings guide](docs/recordings/README.md)
+for search semantics, playback, downloads, and retention behavior.
 
 ## Architecture
 
@@ -234,6 +239,7 @@ The [Aegivue handbook](docs/README.md) is organized by task:
 | --- | --- |
 | [Configuration reference](docs/reference/configuration.md) | Environment variables, ports, defaults, and camera settings |
 | [RTSP camera setup](docs/cameras/rtsp.md) | Adding cameras and diagnosing stream problems |
+| [Recordings](docs/recordings/README.md) | Filtering, playback, downloads, pagination, and retention |
 | [Motion and events](docs/motion/events.md) | Detector behavior, triggered recording, API, and limitations |
 | [Upgrade guide](docs/operations/upgrades.md) | Backups, images, migrations, and schema verification |
 | [Troubleshooting runbook](docs/operations/troubleshooting.md) | Symptom-first operational checks |
@@ -251,7 +257,7 @@ All application endpoints are rooted at `/api/v1`.
 | --- | --- |
 | `/health` | API and database health |
 | `/cameras` | List, create, read, update, delete, start, stop, and inspect status |
-| `/recordings` | Paginate metadata, read details, update expiry, and stream media |
+| `/recordings` | Filter and paginate metadata, read details, update expiry, and stream media |
 | `/events` | Paginate and filter events or read an individual event |
 
 Camera passwords and internal storage paths are omitted from API read models.
