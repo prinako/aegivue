@@ -20,6 +20,8 @@ class RecordingListViewModel extends ChangeNotifier {
   Object? _expiryError;
   int _reloadGeneration = 0;
   int _totalItems = 0;
+  DateTime? _from;
+  DateTime? _to;
   Future<void>? _expiryOperation;
   bool _disposed = false;
 
@@ -32,10 +34,27 @@ class RecordingListViewModel extends ChangeNotifier {
   bool get updatingExpiry => _updatingExpiry;
   Object? get expiryError => _expiryError;
   int get totalItems => _totalItems;
+  DateTime? get from => _from;
+  DateTime? get to => _to;
 
   Future<void> load() => _reload();
 
   Future<void> refresh() => _reload();
+
+  Future<void> applyDateFilter({DateTime? from, DateTime? to}) async {
+    if (from != null && to != null && from.isAfter(to)) {
+      throw ArgumentError('The start date must not be after the end date.');
+    }
+    _from = from;
+    _to = to;
+    await _reload();
+  }
+
+  Future<void> clearDateFilter() async {
+    _from = null;
+    _to = null;
+    await _reload();
+  }
 
   Future<void> _reload() async {
     final expiryOperation = _expiryOperation;
@@ -53,7 +72,12 @@ class RecordingListViewModel extends ChangeNotifier {
     _error = null;
     _notifyListeners();
     try {
-      final page = await _repository.listPage(page: 1, pageSize: _pageSize);
+      final page = await _repository.listPage(
+        page: 1,
+        pageSize: _pageSize,
+        from: _from,
+        to: _to,
+      );
       if (_disposed || generation != _reloadGeneration) return;
       _applyPage(page);
       _loaded = true;
@@ -85,6 +109,8 @@ class RecordingListViewModel extends ChangeNotifier {
       final nextPage = await _repository.listPage(
         page: _page + 1,
         pageSize: _pageSize,
+        from: _from,
+        to: _to,
       );
       if (_disposed || generation != _reloadGeneration) return;
       final existingIds = _items.map((item) => item.id).toSet();

@@ -163,6 +163,135 @@ void main() {
     expect(viewModel.items.map((item) => item.id), ['one', 'two']);
   });
 
+  test('applies a from-only date filter', () async {
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(_page(1, [_recording('filtered')]));
+    final viewModel = RecordingListViewModel(repository);
+    final from = DateTime.utc(2026, 10, 17, 8);
+
+    await viewModel.applyDateFilter(from: from);
+
+    expect(viewModel.from, from);
+    expect(viewModel.to, isNull);
+    expect(repository.requests.single, (page: 1, from: from, to: null));
+  });
+
+  test('applies a to-only date filter', () async {
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(_page(1, [_recording('filtered')]));
+    final viewModel = RecordingListViewModel(repository);
+    final to = DateTime.utc(2026, 10, 17, 18);
+
+    await viewModel.applyDateFilter(to: to);
+
+    expect(viewModel.from, isNull);
+    expect(viewModel.to, to);
+    expect(repository.requests.single, (page: 1, from: null, to: to));
+  });
+
+  test('applies a complete date range', () async {
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(_page(1, [_recording('filtered')]));
+    final viewModel = RecordingListViewModel(repository);
+    final from = DateTime.utc(2026, 10, 17, 8);
+    final to = DateTime.utc(2026, 10, 17, 18);
+
+    await viewModel.applyDateFilter(from: from, to: to);
+
+    expect(viewModel.from, from);
+    expect(viewModel.to, to);
+    expect(repository.requests.single, (page: 1, from: from, to: to));
+  });
+
+  test('clears the active date filter', () async {
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(_page(1, [_recording('recording-1')]));
+    final viewModel = RecordingListViewModel(repository);
+    await viewModel.applyDateFilter(from: DateTime.utc(2026, 10, 17));
+
+    await viewModel.clearDateFilter();
+
+    expect(viewModel.from, isNull);
+    expect(viewModel.to, isNull);
+    expect(repository.requests.last, (page: 1, from: null, to: null));
+  });
+
+  test('applying a date filter resets pagination to page one', () async {
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(_page(1, [_recording('one')], totalPages: 2))
+      ..pages[2] = Future.value(_page(2, [_recording('two')], totalPages: 2));
+    final viewModel = RecordingListViewModel(repository);
+    await viewModel.load();
+    await viewModel.loadMore();
+
+    await viewModel.applyDateFilter(from: DateTime.utc(2026, 10, 17));
+
+    expect(repository.requests.last.page, 1);
+    expect(viewModel.items.map((item) => item.id), ['one']);
+  });
+
+  test('loadMore keeps the active date filter', () async {
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(_page(1, [_recording('one')], totalPages: 2))
+      ..pages[2] = Future.value(_page(2, [_recording('two')], totalPages: 2));
+    final viewModel = RecordingListViewModel(repository);
+    final from = DateTime.utc(2026, 10, 17, 8);
+    final to = DateTime.utc(2026, 10, 17, 18);
+    await viewModel.applyDateFilter(from: from, to: to);
+
+    await viewModel.loadMore();
+
+    expect(repository.requests.last, (page: 2, from: from, to: to));
+  });
+
+  test('refresh keeps the active date filter', () async {
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(_page(1, [_recording('one')]));
+    final viewModel = RecordingListViewModel(repository);
+    final from = DateTime.utc(2026, 10, 17, 8);
+    await viewModel.applyDateFilter(from: from);
+
+    await viewModel.refresh();
+
+    expect(repository.requests.last, (page: 1, from: from, to: null));
+  });
+
+  test('an older filtered request cannot overwrite a newer filter', () async {
+    final firstFilter = Completer<RecordingPage>();
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = firstFilter.future;
+    final viewModel = RecordingListViewModel(repository);
+
+    final older = viewModel.applyDateFilter(from: DateTime.utc(2026, 10, 16));
+    repository.pages[1] = Future.value(_page(1, [_recording('new')]));
+    await viewModel.applyDateFilter(from: DateTime.utc(2026, 10, 17));
+    firstFilter.complete(_page(1, [_recording('old')]));
+    await older;
+
+    expect(viewModel.items.single.id, 'new');
+    expect(viewModel.from, DateTime.utc(2026, 10, 17));
+  });
+
+  test(
+    'rejects a date filter whose from bound is after its to bound',
+    () async {
+      final repository = _FakeRecordingRepository();
+      final viewModel = RecordingListViewModel(repository);
+
+      await expectLater(
+        viewModel.applyDateFilter(
+          from: DateTime.utc(2026, 10, 18),
+          to: DateTime.utc(2026, 10, 17),
+        ),
+        throwsArgumentError,
+      );
+
+      expect(repository.requests, isEmpty);
+      expect(viewModel.from, isNull);
+      expect(viewModel.to, isNull);
+    },
+  );
+
   test('setExpiry replaces the matching recording', () async {
     final original = _recording('recording-1');
     final expiresAt = DateTime.utc(2026, 10, 1);
@@ -246,11 +375,17 @@ class _FakeRecordingRepository extends RecordingRepository {
 
   final Map<int, Future<RecordingPage>> pages = {};
   Future<Recording>? expiryResult;
-  int listCalls = 0;
+  final List<({int page, DateTime? from, DateTime? to})> requests = [];
+  int get listCalls => requests.length;
 
   @override
-  Future<RecordingPage> listPage({int page = 1, int pageSize = 25}) {
-    listCalls++;
+  Future<RecordingPage> listPage({
+    int page = 1,
+    int pageSize = 25,
+    DateTime? from,
+    DateTime? to,
+  }) {
+    requests.add((page: page, from: from, to: to));
     return pages[page]!;
   }
 

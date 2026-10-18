@@ -106,7 +106,12 @@ class _RecordingRepository extends RecordingRepository {
   final int totalItems;
 
   @override
-  Future<RecordingPage> listPage({int page = 1, int pageSize = 25}) async {
+  Future<RecordingPage> listPage({
+    int page = 1,
+    int pageSize = 25,
+    DateTime? from,
+    DateTime? to,
+  }) async {
     listCalls++;
     return RecordingPage(
       items: items,

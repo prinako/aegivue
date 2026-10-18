@@ -108,6 +108,102 @@ void main() {
     );
 
     expect(find.text('No finalized recordings yet.'), findsOneWidget);
+    expect(find.text('Filter by date'), findsOneWidget);
+  });
+
+  testWidgets('applies the date range from the filter dialog', (tester) async {
+    final from = DateTime(2026, 10, 17);
+    final to = DateTime(2026, 10, 17, 23, 59, 59, 999, 999);
+    DateTime? appliedFrom;
+    DateTime? appliedTo;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RecordingLibrary(
+            recordings: const [],
+            onRefresh: () async {},
+            onLoadMore: () async {},
+            onSetExpiry: (_, _) async {},
+            hasMore: false,
+            loadingMore: false,
+            updatingExpiry: false,
+            filterFrom: from,
+            filterTo: to,
+            onApplyDateFilter: ({from, to}) async {
+              appliedFrom = from;
+              appliedTo = to;
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('17 Oct 2026 – 17 Oct 2026'), findsOneWidget);
+    await tester.tap(find.text('17 Oct 2026 – 17 Oct 2026'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Filter recordings'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('recording-filter-from-date')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('recording-filter-to-time')),
+      findsOneWidget,
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Apply'));
+    await tester.pumpAndSettle();
+
+    expect(appliedFrom, from);
+    expect(appliedTo, to);
+  });
+
+  testWidgets('clears an active date filter', (tester) async {
+    var clearCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RecordingLibrary(
+            recordings: const [],
+            onRefresh: () async {},
+            onLoadMore: () async {},
+            onSetExpiry: (_, _) async {},
+            hasMore: false,
+            loadingMore: false,
+            updatingExpiry: false,
+            filterFrom: DateTime(2026, 10, 17),
+            onClearDateFilter: () async => clearCalls++,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Clear date filter'));
+    await tester.pump();
+
+    expect(clearCalls, 1);
+  });
+
+  testWidgets('shows a filtered empty state', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RecordingLibrary(
+            recordings: const [],
+            onRefresh: () async {},
+            onLoadMore: () async {},
+            onSetExpiry: (_, _) async {},
+            hasMore: false,
+            loadingMore: false,
+            updatingExpiry: false,
+            filterFrom: DateTime(2026, 10, 17),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('No recordings match this date filter.'), findsOneWidget);
   });
 
   testWidgets('shows the end-of-list message', (tester) async {

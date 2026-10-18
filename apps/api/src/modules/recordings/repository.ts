@@ -19,6 +19,11 @@ export interface RecordingView {
   createdAt: string;
 }
 
+export interface RecordingDateFilter {
+  from?: Date;
+  to?: Date;
+}
+
 const map = (row: Record<string, unknown>): RecordingView => ({
   id: String(row.id),
   cameraId: String(row.camera_id),
@@ -42,17 +47,27 @@ const map = (row: Record<string, unknown>): RecordingView => ({
 
 export class RecordingRepository {
   public constructor(private readonly db: Pool) {}
-  public async list(limit: number, offset: number): Promise<RecordingView[]> {
+  public async list(
+    limit: number,
+    offset: number,
+    filter: RecordingDateFilter = {},
+  ): Promise<RecordingView[]> {
+    const { clause, values } = dateFilterQuery(filter);
+    const limitParameter = values.length + 1;
+    const offsetParameter = values.length + 2;
     const { rows } = await this.db.query(
-      "SELECT * FROM recordings ORDER BY start_time DESC LIMIT $1 OFFSET $2",
-      [limit, offset],
+      `SELECT * FROM recordings${clause} ORDER BY start_time DESC LIMIT $${String(limitParameter)} OFFSET $${String(offsetParameter)}`,
+      [...values, limit, offset],
     );
     return rows.map(map);
   }
-  public async count(): Promise<number> {
-    const { rows } = await this.db.query(
-      "SELECT count(*)::bigint AS count FROM recordings",
-    );
+  public async count(filter: RecordingDateFilter = {}): Promise<number> {
+    const { clause, values } = dateFilterQuery(filter);
+    const sql = `SELECT count(*)::bigint AS count FROM recordings${clause}`;
+    const result = values.length
+      ? await this.db.query(sql, values)
+      : await this.db.query(sql);
+    const { rows } = result;
     return Number((rows[0] as { count: string }).count);
   }
   public async find(id: string): Promise<RecordingView | null> {
@@ -86,4 +101,24 @@ export class RecordingRepository {
       ? { filePath: String(row.file_path), container: String(row.container) }
       : null;
   }
+}
+
+function dateFilterQuery(filter: RecordingDateFilter): {
+  clause: string;
+  values: Date[];
+} {
+  const conditions: string[] = [];
+  const values: Date[] = [];
+  if (filter.from) {
+    values.push(filter.from);
+    conditions.push(`start_time >= $${String(values.length)}`);
+  }
+  if (filter.to) {
+    values.push(filter.to);
+    conditions.push(`start_time <= $${String(values.length)}`);
+  }
+  return {
+    clause: conditions.length ? ` WHERE ${conditions.join(" AND ")}` : "",
+    values,
+  };
 }
