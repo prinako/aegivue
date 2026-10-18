@@ -1,3 +1,4 @@
+import 'package:aegivue/features/cameras/presentation/view_models/camera_list_view_model.dart';
 import 'package:aegivue/features/recordings/presentation/view_models/recording_list_view_model.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_library.dart';
 import 'package:aegivue/shared/widgets/app_error_state_widget.dart';
@@ -11,6 +12,7 @@ class RecordingsSectionPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final recordings = context.watch<RecordingListViewModel>();
+    final cameras = context.watch<CameraListViewModel>();
     if (recordings.loading && !recordings.loaded) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -40,6 +42,12 @@ class RecordingsSectionPage extends StatelessWidget {
             filterTo: recordings.to,
             onApplyDateFilter: recordings.applyDateFilter,
             onClearDateFilter: recordings.clearDateFilter,
+            cameras: cameras.items,
+            camerasLoading: cameras.loading && !cameras.loaded,
+            cameraError: cameras.error,
+            selectedCameraIds: recordings.cameraIds,
+            onApplyCameraFilter: recordings.applyCameraFilter,
+            onClearCameraFilter: recordings.clearCameraFilter,
           ),
         ),
       ],

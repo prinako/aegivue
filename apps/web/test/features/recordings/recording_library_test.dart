@@ -4,6 +4,10 @@ library;
 import 'dart:async';
 
 import 'package:aegivue/core/theme/app_theme.dart';
+import 'package:aegivue/features/cameras/domain/camera.dart';
+import 'package:aegivue/features/cameras/domain/camera_connection.dart';
+import 'package:aegivue/features/cameras/domain/camera_motion_config.dart';
+import 'package:aegivue/features/cameras/domain/camera_recording_config.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_card.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_library.dart';
@@ -47,38 +51,40 @@ void main() {
     expect(find.byType(RecordingCard).evaluate().length, lessThan(20));
   });
 
-  testWidgets('shows the date filter at the right edge of a desktop header', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1200, 700);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'shows the filter toolbar at the right edge of a desktop header',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.build(),
-        home: Scaffold(
-          body: RecordingLibrary(
-            recordings: const [],
-            onRefresh: () async {},
-            onLoadMore: () async {},
-            onSetExpiry: (_, _) async {},
-            hasMore: false,
-            loadingMore: false,
-            updatingExpiry: false,
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build(),
+          home: Scaffold(
+            body: RecordingLibrary(
+              recordings: const [],
+              onRefresh: () async {},
+              onLoadMore: () async {},
+              onSetExpiry: (_, _) async {},
+              hasMore: false,
+              loadingMore: false,
+              updatingExpiry: false,
+              cameras: const [_frontDoor],
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    final filter = find.widgetWithText(OutlinedButton, 'Filter by date');
-    expect(filter.hitTestable(), findsOneWidget);
-    expect(tester.getTopRight(filter).dx, closeTo(1176, 1));
-  });
+      final filter = find.widgetWithText(OutlinedButton, 'All cameras');
+      expect(filter.hitTestable(), findsOneWidget);
+      expect(tester.getTopRight(filter).dx, closeTo(1176, 1));
+    },
+  );
 
   testWidgets(
-    'keeps the date filter visible while the recording grid scrolls',
+    'keeps recording filters visible while the recording grid scrolls',
     (tester) async {
       tester.view.physicalSize = const Size(800, 600);
       tester.view.devicePixelRatio = 1;
@@ -106,18 +112,50 @@ void main() {
               hasMore: false,
               loadingMore: false,
               updatingExpiry: false,
+              cameras: const [_frontDoor],
+              selectedCameraIds: const {'front-door'},
             ),
           ),
         ),
       );
 
       expect(find.text('Filter by date'), findsOneWidget);
+      expect(find.text('Front Door'), findsOneWidget);
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -2000));
       await tester.pump();
 
       expect(find.text('Filter by date'), findsOneWidget);
+      expect(find.text('Front Door'), findsOneWidget);
     },
   );
+
+  testWidgets('keeps both filters usable in a narrow header', (tester) async {
+    tester.view.physicalSize = const Size(480, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RecordingLibrary(
+            recordings: const [],
+            onRefresh: () async {},
+            onLoadMore: () async {},
+            onSetExpiry: (_, _) async {},
+            hasMore: false,
+            loadingMore: false,
+            updatingExpiry: false,
+            cameras: const [_frontDoor],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Filter by date').hitTestable(), findsOneWidget);
+    expect(find.text('All cameras').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('requests one next page while a near-bottom load is pending', (
     tester,
@@ -270,13 +308,17 @@ void main() {
             hasMore: false,
             loadingMore: false,
             updatingExpiry: false,
-            filterFrom: DateTime(2026, 10, 17),
+            selectedCameraIds: const {'front-door'},
+            cameras: const [_frontDoor],
           ),
         ),
       ),
     );
 
-    expect(find.text('No recordings match this date filter.'), findsOneWidget);
+    expect(
+      find.text('No recordings match the active filters.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('shows the end-of-list message', (tester) async {
@@ -464,3 +506,26 @@ void main() {
     },
   );
 }
+
+const _frontDoor = Camera(
+  id: 'front-door',
+  name: 'Front Door',
+  enabled: false,
+  connection: CameraConnection(
+    host: 'camera.local',
+    port: 554,
+    mainStream: '/stream',
+  ),
+  recording: CameraRecordingConfig(
+    enabled: true,
+    mode: 'continuous',
+    preEventSeconds: 5,
+    postEventSeconds: 15,
+  ),
+  motion: CameraMotionConfig(
+    enabled: false,
+    stream: 'sub',
+    fps: 5,
+    sensitivity: 0.65,
+  ),
+);

@@ -26,6 +26,19 @@ void main() {
     expect(query['from'], '2026-10-17T11:00:00.000Z');
     expect(query['to'], '2026-10-17T21:00:00.000Z');
   });
+
+  test(
+    'sends selected camera IDs as a stable comma-separated filter',
+    () async {
+      final api = _FakeApiClient();
+      final repository = RecordingRepository(api);
+
+      await repository.listPage(cameraIds: {'garage', 'front-door'});
+
+      final query = Uri.parse(api.requestedPath!).queryParameters;
+      expect(query['cameraIds'], 'front-door,garage');
+    },
+  );
 }
 
 class _FakeApiClient extends ApiClient {

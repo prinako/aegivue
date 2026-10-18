@@ -1,4 +1,6 @@
+import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
+import 'package:aegivue/features/recordings/presentation/widgets/recording_camera_filter_control.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_details_dialog.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_date_filter_control.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_expiry_sheet.dart';
@@ -19,6 +21,12 @@ class RecordingLibrary extends StatefulWidget {
     this.filterTo,
     this.onApplyDateFilter = _ignoreDateFilter,
     this.onClearDateFilter = _ignoreClearDateFilter,
+    this.cameras = const [],
+    this.camerasLoading = false,
+    this.cameraError,
+    this.selectedCameraIds = const {},
+    this.onApplyCameraFilter = _ignoreCameraFilter,
+    this.onClearCameraFilter = _ignoreClearCameraFilter,
   });
 
   final List<Recording> recordings;
@@ -33,8 +41,15 @@ class RecordingLibrary extends StatefulWidget {
   final DateTime? filterTo;
   final ApplyRecordingDateFilter onApplyDateFilter;
   final Future<void> Function() onClearDateFilter;
+  final List<Camera> cameras;
+  final bool camerasLoading;
+  final Object? cameraError;
+  final Set<String> selectedCameraIds;
+  final ApplyRecordingCameraFilter onApplyCameraFilter;
+  final Future<void> Function() onClearCameraFilter;
 
   bool get hasDateFilter => filterFrom != null || filterTo != null;
+  bool get hasRecordingFilter => hasDateFilter || selectedCameraIds.isNotEmpty;
 
   @override
   State<RecordingLibrary> createState() => _RecordingLibraryState();
@@ -170,17 +185,34 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
                   ),
                 ],
               );
-              final filter = RecordingDateFilterControl(
-                from: widget.filterFrom,
-                to: widget.filterTo,
-                onApply: widget.onApplyDateFilter,
-                onClear: widget.onClearDateFilter,
+              final filters = Wrap(
+                alignment: constraints.maxWidth >= 1000
+                    ? WrapAlignment.end
+                    : WrapAlignment.start,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  RecordingDateFilterControl(
+                    from: widget.filterFrom,
+                    to: widget.filterTo,
+                    onApply: widget.onApplyDateFilter,
+                    onClear: widget.onClearDateFilter,
+                  ),
+                  RecordingCameraFilterControl(
+                    cameras: widget.cameras,
+                    selectedCameraIds: widget.selectedCameraIds,
+                    loading: widget.camerasLoading,
+                    error: widget.cameraError,
+                    onApply: widget.onApplyCameraFilter,
+                    onClear: widget.onClearCameraFilter,
+                  ),
+                ],
               );
 
-              if (constraints.maxWidth < 700) {
+              if (constraints.maxWidth < 1000) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [heading, const SizedBox(height: 12), filter],
+                  children: [heading, const SizedBox(height: 12), filters],
                 );
               }
 
@@ -189,7 +221,7 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
                 children: [
                   Expanded(child: heading),
                   const SizedBox(width: 16),
-                  filter,
+                  Expanded(child: filters),
                 ],
               );
             },
@@ -205,8 +237,8 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
                 RecordingSliverGrid(
                   recordings: widget.recordings,
                   onOpen: _openRecording,
-                  emptyMessage: widget.hasDateFilter
-                      ? 'No recordings match this date filter.'
+                  emptyMessage: widget.hasRecordingFilter
+                      ? 'No recordings match the active filters.'
                       : 'No finalized recordings yet.',
                 ),
                 if (widget.loadingMore)
@@ -279,3 +311,7 @@ String _formatExpiry(DateTime value) {
 Future<void> _ignoreDateFilter({DateTime? from, DateTime? to}) async {}
 
 Future<void> _ignoreClearDateFilter() async {}
+
+Future<void> _ignoreCameraFilter(Set<String> cameraIds) async {}
+
+Future<void> _ignoreClearCameraFilter() async {}

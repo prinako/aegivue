@@ -55,7 +55,7 @@ finalized media remains on a dedicated recording volume.
 | --- | --- |
 | Cameras | RTSP main/substream configuration, enable/disable controls, runtime status, automatic worker recovery |
 | Recording | Continuous capture or one assembled MP4 per motion event, atomic finalization, pre/post-event footage |
-| Playback | Finalized-recording library, date/time filtering, lazy-rendered cards, in-browser playback, downloads, HTTP range requests |
+| Playback | Finalized-recording library, date/time and multi-camera filtering, lazy-rendered cards, in-browser playback, downloads, HTTP range requests |
 | Retention | Per-camera expiry, protected-recording cleanup exclusions, automatic file and metadata cleanup |
 | Live view | WebRTC, LL-HLS fallback, substream preference, adaptive camera grid, focused viewer |
 | Motion | Supervised frame-difference detector, configurable stream/FPS/sensitivity, persisted and linked events |
@@ -192,10 +192,11 @@ and configured post-event window into one recording. See
 [Motion and events](docs/motion/events.md) for configuration ranges, failure
 behavior, and current detector limitations.
 
-The recording library browses finalized footage with custom local date/time
-ranges. Filtering and pagination run on the server, while the Flutter grid
-lazily builds visible cards. See the [recordings guide](docs/recordings/README.md)
-for search semantics, playback, downloads, and retention behavior.
+The recording library browses finalized footage by camera and custom local
+date/time ranges. Filtering and pagination run on the server, while the Flutter
+grid lazily builds visible cards. See the
+[recordings guide](docs/recordings/README.md) for search semantics, playback,
+downloads, and retention behavior.
 
 ## Architecture
 

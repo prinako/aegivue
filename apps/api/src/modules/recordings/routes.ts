@@ -9,7 +9,14 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { resolve, sep } from "node:path";
-import { RecordingRepository, type RecordingDateFilter } from "./repository.js";
+import { cameraId } from "../cameras/schemas.js";
+import { RecordingRepository, type RecordingFilter } from "./repository.js";
+
+const cameraIds = z
+  .string()
+  .min(1)
+  .transform((value) => value.split(","))
+  .pipe(z.array(cameraId).min(1));
 
 const pagination = z
   .object({
@@ -17,6 +24,7 @@ const pagination = z
     pageSize: z.coerce.number().int().min(1).max(100).default(25),
     from: z.string().datetime({ offset: true }).optional(),
     to: z.string().datetime({ offset: true }).optional(),
+    cameraIds: cameraIds.optional(),
   })
   .superRefine((value, context) => {
     if (
@@ -170,9 +178,10 @@ export const recordingRoutes: FastifyPluginAsync<{
         message: "Invalid recording filters",
       });
     const offset = (parsed.data.page - 1) * parsed.data.pageSize;
-    const filter: RecordingDateFilter = {};
+    const filter: RecordingFilter = {};
     if (parsed.data.from) filter.from = new Date(parsed.data.from);
     if (parsed.data.to) filter.to = new Date(parsed.data.to);
+    if (parsed.data.cameraIds) filter.cameraIds = parsed.data.cameraIds;
     const [items, totalItems] = await Promise.all([
       repository.list(parsed.data.pageSize, offset, filter),
       repository.count(filter),

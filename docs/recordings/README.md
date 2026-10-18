@@ -14,7 +14,14 @@ protection details.
 
 ## Searching recordings
 
-Select **Filter by date** above the grid to set either or both bounds:
+Use **All cameras** above the grid to select one or more cameras by name.
+Disabled and offline cameras remain available because their historical
+recordings are still searchable. An empty selection, **Select all**, and
+**Clear** all mean that no camera restriction is applied. A selected camera
+that is no longer in the current camera list remains identified in the filter
+until it is cleared.
+
+Select **Filter by date** to set either or both time bounds:
 
 - **From** alone includes recordings that start at or after that date and time.
 - **To** alone includes recordings that start at or before that date and time.
@@ -35,8 +42,8 @@ dialog without changing the current filter.
 
 Filtering compares the recording's start time, not its entire duration. A
 recording that starts before **From** is therefore excluded even if it continues
-into the selected range. The active filter remains in effect during pull-to-
-refresh and while loading later pages.
+into the selected range. Camera and date filters combine with `AND`. The active
+filters remain in effect during pull-to-refresh and while loading later pages.
 
 ## Playback and downloads
 
@@ -87,11 +94,14 @@ filter stays available while browsing.
 | `pageSize` | Number of recordings per page | Default `25`; integer from `1` through `100` |
 | `from` | Inclusive lower bound on recording start time | Optional ISO-8601 timestamp with a timezone offset |
 | `to` | Inclusive upper bound on recording start time | Optional ISO-8601 timestamp with a timezone offset |
+| `cameraIds` | Camera IDs to match | Optional comma-separated list of valid camera IDs |
 
-The API applies `from` and `to` to `start_time` in the database for both the
-page query and its count query. The response uses the existing pagination
-envelope: `items`, `page`, `pageSize`, `totalItems`, and `totalPages`. The totals
-therefore describe the filtered result set.
+The API applies `cameraIds` to `camera_id` and `from` and `to` to `start_time`
+in the database for both the page query and its count query. A recording may
+match any requested camera, while camera and date constraints combine with
+`AND`. The response uses the existing pagination envelope: `items`, `page`,
+`pageSize`, `totalItems`, and `totalPages`. The totals therefore describe the
+filtered result set.
 
 The Flutter client serializes filter bounds in UTC with a `Z` suffix. Other API
 clients may send any valid offset, such as `-03:00`; the offset must be URL-
@@ -99,9 +109,9 @@ encoded when necessary. For example:
 
 ```sh
 curl --fail-with-body \
-  'http://127.0.0.1:3000/api/v1/recordings?page=1&pageSize=25&from=2026-10-17T08%3A00%3A00-03%3A00&to=2026-10-17T18%3A00%3A00-03%3A00'
+  'http://127.0.0.1:3000/api/v1/recordings?page=1&pageSize=25&cameraIds=front-door,garage&from=2026-10-17T08%3A00%3A00-03%3A00&to=2026-10-17T18%3A00%3A00-03%3A00'
 ```
 
-Malformed timestamps, page values outside their limits, and ranges where
-`from` is later than `to` return HTTP `400` with error code
+Malformed timestamps, invalid camera IDs, page values outside their limits,
+and ranges where `from` is later than `to` return HTTP `400` with error code
 `VALIDATION_ERROR`.
