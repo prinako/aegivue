@@ -17,33 +17,13 @@ class RecordingListWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (recordings.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Row(
-            children: [
-              Icon(Icons.video_library_outlined, color: Colors.white38),
-              SizedBox(width: 12),
-              Text(
-                'No finalized recordings yet.',
-                style: TextStyle(color: Colors.white54),
-              ),
-            ],
-          ),
-        ),
-      );
+      return const _EmptyRecordingList();
     }
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 1180
-            ? 4
-            : constraints.maxWidth >= 850
-            ? 3
-            : constraints.maxWidth >= 540
-            ? 2
-            : 1;
-        final width = (constraints.maxWidth - ((columns - 1) * 14)) / columns;
+        final columns = _columnCount(constraints.maxWidth);
+        final cardWidth = _cardWidth(constraints.maxWidth, columns);
 
         return Wrap(
           spacing: 14,
@@ -51,8 +31,9 @@ class RecordingListWidget extends StatelessWidget {
           children: [
             for (final recording in recordings)
               SizedBox(
-                width: width,
+                width: cardWidth,
                 child: RecordingCard(
+                  key: ValueKey(recording.id),
                   recording: recording,
                   selected: recording.id == selectedId,
                   onTap: () => onOpen(recording),
@@ -64,3 +45,93 @@ class RecordingListWidget extends StatelessWidget {
     );
   }
 }
+
+class RecordingSliverGrid extends StatelessWidget {
+  const RecordingSliverGrid({
+    super.key,
+    required this.recordings,
+    required this.onOpen,
+    this.selectedId,
+    this.emptyMessage = 'No finalized recordings yet.',
+  });
+
+  final List<Recording> recordings;
+  final ValueChanged<Recording> onOpen;
+  final String? selectedId;
+  final String emptyMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    if (recordings.isEmpty) {
+      return SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        sliver: SliverToBoxAdapter(
+          child: _EmptyRecordingList(message: emptyMessage),
+        ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      sliver: SliverLayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.crossAxisExtent;
+          final columns = _columnCount(width);
+          final cardWidth = _cardWidth(width, columns);
+
+          return SliverGrid.builder(
+            itemCount: recordings.length,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14,
+              mainAxisExtent: (cardWidth * 9 / 16) + 145,
+            ),
+            itemBuilder: (context, index) {
+              final recording = recordings[index];
+              return RecordingCard(
+                key: ValueKey(recording.id),
+                recording: recording,
+                selected: recording.id == selectedId,
+                onTap: () => onOpen(recording),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _EmptyRecordingList extends StatelessWidget {
+  const _EmptyRecordingList({this.message = 'No finalized recordings yet.'});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Row(
+          children: [
+            const Icon(Icons.video_library_outlined, color: Colors.white38),
+            const SizedBox(width: 12),
+            Text(message, style: const TextStyle(color: Colors.white54)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+int _columnCount(double width) => width >= 1180
+    ? 4
+    : width >= 850
+    ? 3
+    : width >= 540
+    ? 2
+    : 1;
+
+double _cardWidth(double width, int columns) =>
+    (width - ((columns - 1) * 14)) / columns;
