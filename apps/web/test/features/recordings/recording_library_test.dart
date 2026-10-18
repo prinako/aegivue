@@ -46,46 +46,47 @@ void main() {
     expect(find.byType(RecordingCard).evaluate().length, lessThan(20));
   });
 
-  testWidgets('keeps the date filter visible while the recording grid scrolls', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(800, 600);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final recordings = List.generate(
-      100,
-      (index) => Recording(
-        id: 'recording-$index',
-        cameraId: 'camera-$index',
-        startTime: DateTime.utc(2026, 10, 1),
-        container: 'mp4',
-        playbackUrl: '/recording-$index.mp4',
-      ),
-    );
+  testWidgets(
+    'keeps the date filter visible while the recording grid scrolls',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final recordings = List.generate(
+        100,
+        (index) => Recording(
+          id: 'recording-$index',
+          cameraId: 'camera-$index',
+          startTime: DateTime.utc(2026, 10, 1),
+          container: 'mp4',
+          playbackUrl: '/recording-$index.mp4',
+        ),
+      );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: RecordingLibrary(
-            recordings: recordings,
-            onRefresh: () async {},
-            onLoadMore: () async {},
-            onSetExpiry: (_, _) async {},
-            hasMore: false,
-            loadingMore: false,
-            updatingExpiry: false,
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RecordingLibrary(
+              recordings: recordings,
+              onRefresh: () async {},
+              onLoadMore: () async {},
+              onSetExpiry: (_, _) async {},
+              hasMore: false,
+              loadingMore: false,
+              updatingExpiry: false,
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('Filter by date'), findsOneWidget);
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, -2000));
-    await tester.pump();
+      expect(find.text('Filter by date'), findsOneWidget);
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -2000));
+      await tester.pump();
 
-    expect(find.text('Filter by date'), findsOneWidget);
-  });
+      expect(find.text('Filter by date'), findsOneWidget);
+    },
+  );
 
   testWidgets('requests one next page while a near-bottom load is pending', (
     tester,
