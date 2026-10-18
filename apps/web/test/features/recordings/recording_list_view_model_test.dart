@@ -112,7 +112,11 @@ void main() {
         _page(1, [_recording('one'), _recording('two')], totalPages: 2),
       )
       ..pages[2] = Future.value(
-        _page(2, [_recording('two'), _recording('three')], totalPages: 2),
+        _page(2, [
+          _recording('two'),
+          _recording('three'),
+          _recording('three'),
+        ], totalPages: 2),
       );
     final viewModel = RecordingListViewModel(repository);
     await viewModel.load();
@@ -122,6 +126,22 @@ void main() {
     expect(viewModel.items.map((item) => item.id), ['one', 'two', 'three']);
     expect(viewModel.hasMore, isFalse);
     expect(viewModel.loadingMore, isFalse);
+  });
+
+  test('loadMore does not start an overlapping page request', () async {
+    final nextPage = Completer<RecordingPage>();
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(_page(1, [_recording('one')], totalPages: 2))
+      ..pages[2] = nextPage.future;
+    final viewModel = RecordingListViewModel(repository);
+    await viewModel.load();
+
+    final firstLoadMore = viewModel.loadMore();
+    await viewModel.loadMore();
+
+    expect(repository.listCalls, 2);
+    nextPage.complete(_page(2, [_recording('two')], totalPages: 2));
+    await firstLoadMore;
   });
 
   test('successful pagination retry clears the previous error', () async {
