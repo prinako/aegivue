@@ -25,6 +25,19 @@ export interface RecordingFilter {
   cameraIds?: string[];
 }
 
+export interface RecordingTimelineItem {
+  recordingId: string;
+  cameraId: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface RecordingTimelineFilter {
+  from: Date;
+  to: Date;
+  cameraIds?: string[];
+}
+
 const map = (row: Record<string, unknown>): RecordingView => ({
   id: String(row.id),
   cameraId: String(row.camera_id),
@@ -70,6 +83,42 @@ export class RecordingRepository {
       : await this.db.query(sql);
     const { rows } = result;
     return Number((rows[0] as { count: string }).count);
+  }
+
+  public async timeline(
+    filter: RecordingTimelineFilter,
+    limit: number,
+  ): Promise<RecordingTimelineItem[]> {
+    const values: (Date | string[] | number)[] = [filter.from, filter.to];
+    let cameraCondition = "";
+    if (filter.cameraIds) {
+      values.push(filter.cameraIds);
+      cameraCondition = ` AND camera_id = ANY($${String(values.length)}::varchar[])`;
+    }
+    values.push(limit);
+    const limitParameter = values.length;
+    const { rows } = await this.db.query(
+      `SELECT id, camera_id, start_time,
+              COALESCE(
+                end_time,
+                start_time + duration_ms * interval '1 millisecond'
+              ) AS end_time
+       FROM recordings
+       WHERE start_time < $2
+         AND COALESCE(
+               end_time,
+               start_time + duration_ms * interval '1 millisecond'
+             ) > $1${cameraCondition}
+       ORDER BY start_time ASC, id ASC
+       LIMIT $${String(limitParameter)}`,
+      values,
+    );
+    return rows.map((row: Record<string, unknown>) => ({
+      recordingId: String(row.id),
+      cameraId: String(row.camera_id),
+      startTime: new Date(row.start_time as string).toISOString(),
+      endTime: new Date(row.end_time as string).toISOString(),
+    }));
   }
   public async find(id: string): Promise<RecordingView | null> {
     const { rows } = await this.db.query(

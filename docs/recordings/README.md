@@ -12,6 +12,40 @@ and the resolution and file size when available. Select a card to open the
 player and see available codec, resolution, frame-rate, retention, and
 protection details.
 
+Use the **Grid / Timeline** control without leaving the Recordings route:
+
+- **Grid** keeps the newest-first, virtualized card library and server-side
+  pagination.
+- **Timeline** shows one row for each selected or available camera. Colored
+  intervals represent finalized footage; empty track areas have no indexed
+  recording. Hover an interval for its local start, end, and duration, then
+  select it to load the existing recording player.
+
+Overlapping recordings use separate compact lanes so each interval remains
+selectable. Disabled and offline cameras remain visible, and a selected camera
+that is no longer registered is labeled unavailable when historical intervals
+or the active filter still reference it. The timeline never assumes that a
+registered camera has footage.
+
+### Timeline dates and zoom
+
+With no date filter, Timeline opens on the current local calendar day. Previous
+day, **Today**, and next day change only the timeline viewport. The 24-hour,
+6-hour, and 1-hour presets change horizontal scale; zoomed tracks scroll
+horizontally. A local day runs from one local midnight to the next, so a
+daylight-saving transition can contain 23 or 25 elapsed hours.
+
+The Grid's date and camera filters are shared with Timeline. Camera selections
+choose its rows and constrain its interval request. Date bounds are intersected
+with the displayed local day. Timeline navigation and zoom do not rewrite or
+clear those filters, so returning to Grid preserves the user's exact search.
+The browser converts the resulting interval bounds to UTC for the API.
+
+Selecting an interval loads only that recording into the existing player; the
+timeline does not create a video element per segment. Continuous playback
+across recording files and click-position seeking are not implemented in this
+version.
+
 ## Searching recordings
 
 Use **All cameras** above the grid to select one or more cameras by name.
@@ -115,3 +149,39 @@ curl --fail-with-body \
 Malformed timestamps, invalid camera IDs, page values outside their limits,
 and ranges where `from` is later than `to` return HTTP `400` with error code
 `VALIDATION_ERROR`.
+
+### Timeline endpoint
+
+`GET /api/v1/recordings/timeline` returns lightweight interval metadata for
+recordings that overlap a requested UTC or offset-aware window. It does not
+return thumbnails, file paths, or video data.
+
+| Parameter | Description | Limits |
+| --- | --- | --- |
+| `from` | Start of the half-open window | Required ISO-8601 timestamp with an offset |
+| `to` | End of the half-open window | Required ISO-8601 timestamp with an offset; must be after `from` |
+| `cameraIds` | Camera IDs to match | Optional comma-separated valid IDs |
+
+The maximum requested window is 31 elapsed days. The query includes recordings
+that begin before the window and continue into it, end after it, or span it
+completely. A missing `end_time` is derived only when indexed `duration_ms` is
+available; incomplete rows without either value are omitted rather than shown
+as fabricated availability. Results are ordered by start time and recording ID.
+
+The endpoint fetches at most 5,001 database rows to detect overflow. If more
+than 5,000 intervals match, it returns HTTP `422` with
+`TIMELINE_RESULT_LIMIT`; clients must narrow the date or camera filter rather
+than render a silently truncated timeline.
+
+```json
+{
+  "items": [
+    {
+      "recordingId": "d01a30dc-9b3f-46de-a11b-5dc06d513f63",
+      "cameraId": "front-door",
+      "startTime": "2026-10-18T12:00:00.000Z",
+      "endTime": "2026-10-18T12:05:00.000Z"
+    }
+  ]
+}
+```

@@ -38,6 +38,24 @@ const pagination = z
       });
     }
   });
+const maximumTimelineWindowMs = 31 * 24 * 60 * 60 * 1000;
+const timelineItemLimit = 5000;
+const timelineQuery = z
+  .object({
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true }),
+    cameraIds: cameraIds.optional(),
+  })
+  .superRefine((value, context) => {
+    const from = Date.parse(value.from);
+    const to = Date.parse(value.to);
+    if (from >= to || to - from > maximumTimelineWindowMs) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Timeline window must be positive and at most 31 days",
+      });
+    }
+  });
 const recordingId = z.string().uuid();
 const expiryUpdate = z.object({
   expiresAt: z.string().datetime().nullable(),
@@ -216,6 +234,36 @@ function registerRecordingDetailsRoute(
   });
 }
 
+function registerRecordingTimelineRoute(
+  app: FastifyInstance,
+  repository: RecordingRepository,
+) {
+  app.get("/timeline", async (request, reply) => {
+    const parsed = timelineQuery.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        code: "VALIDATION_ERROR",
+        message: "Invalid recording timeline filters",
+      });
+    }
+    const items = await repository.timeline(
+      {
+        from: new Date(parsed.data.from),
+        to: new Date(parsed.data.to),
+        ...(parsed.data.cameraIds ? { cameraIds: parsed.data.cameraIds } : {}),
+      },
+      timelineItemLimit + 1,
+    );
+    if (items.length > timelineItemLimit) {
+      return reply.code(422).send({
+        code: "TIMELINE_RESULT_LIMIT",
+        message: "Timeline contains too many recordings; narrow the filters",
+      });
+    }
+    return { items };
+  });
+}
+
 function registerRecordingExpiryRoute(
   app: FastifyInstance,
   repository: RecordingRepository,
@@ -310,6 +358,7 @@ export const recordingRoutes: FastifyPluginAsync<{
 }> = async (app, options) => {
   const repository = new RecordingRepository(app.db);
   registerRecordingListRoute(app, repository);
+  registerRecordingTimelineRoute(app, repository);
   registerRecordingDetailsRoute(app, repository);
   registerRecordingExpiryRoute(app, repository);
   registerRecordingThumbnailRoute(app, repository, options.storagePath);
