@@ -8,12 +8,14 @@ class SelectedRecordingCard extends StatelessWidget {
   const SelectedRecordingCard({
     super.key,
     required this.recording,
+    this.cameraName,
     this.onSetExpiry,
     required this.onClose,
     required this.updatingExpiry,
   });
 
   final Recording recording;
+  final String? cameraName;
   final VoidCallback? onSetExpiry;
   final VoidCallback onClose;
   final bool updatingExpiry;
@@ -27,6 +29,7 @@ class SelectedRecordingCard extends StatelessWidget {
         children: [
           _SelectedRecordingHeader(
             recording: recording,
+            cameraName: cameraName,
             onSetExpiry: onSetExpiry,
             onClose: onClose,
             updatingExpiry: updatingExpiry,
@@ -45,12 +48,14 @@ class SelectedRecordingCard extends StatelessWidget {
 class _SelectedRecordingHeader extends StatelessWidget {
   const _SelectedRecordingHeader({
     required this.recording,
+    required this.cameraName,
     required this.onSetExpiry,
     required this.onClose,
     required this.updatingExpiry,
   });
 
   final Recording recording;
+  final String? cameraName;
   final VoidCallback? onSetExpiry;
   final VoidCallback onClose;
   final bool updatingExpiry;
@@ -68,7 +73,7 @@ class _SelectedRecordingHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  recording.cameraId,
+                  cameraName ?? recording.cameraId,
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 Text(
@@ -156,6 +161,17 @@ class _RecordingDetails extends StatelessWidget {
         runSpacing: 8,
         children: [
           _Detail(label: 'Container', value: recording.container.toUpperCase()),
+          _Detail(
+            label: 'Start',
+            value: Formatters.recordingTimestamp(recording.startTime),
+          ),
+          ..._optionalDetail(
+            'End',
+            recording.endTime == null
+                ? null
+                : Formatters.recordingTimestamp(recording.endTime!),
+          ),
+          ..._optionalDetail('Duration', _duration(recording)),
           ..._optionalDetail('Video', recording.videoCodec),
           ..._optionalDetail('Audio', recording.audioCodec),
           ..._optionalDetail('Resolution', _resolution(recording)),
@@ -183,6 +199,19 @@ String? _resolution(Recording recording) {
   final height = recording.height;
   if (width == null || height == null) return null;
   return '$width×$height';
+}
+
+String? _duration(Recording recording) {
+  final milliseconds =
+      recording.durationMs ??
+      recording.endTime?.difference(recording.startTime).inMilliseconds;
+  if (milliseconds == null) return null;
+  final duration = Duration(milliseconds: milliseconds);
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60);
+  final seconds = duration.inSeconds.remainder(60);
+  if (hours > 0) return '${hours}h ${minutes}m ${seconds}s';
+  return '${minutes}m ${seconds}s';
 }
 
 String _retention(DateTime? expiresAt) {
