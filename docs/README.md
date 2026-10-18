@@ -14,12 +14,14 @@ day-two operations, architecture, and contribution workflows.
 1. Follow the repository [quick start](../README.md#quick-start).
 2. Review the [configuration reference](reference/configuration.md).
 3. [Add and verify an RTSP camera](cameras/rtsp.md).
-4. Bookmark the [troubleshooting runbook](operations/troubleshooting.md).
+4. [Browse, filter, and play recordings](recordings/README.md).
+5. Bookmark the [troubleshooting runbook](operations/troubleshooting.md).
 
 ### I operate an existing installation
 
 - [Upgrade safely and apply database migrations](operations/upgrades.md)
 - [Diagnose unhealthy services, streams, and storage](operations/troubleshooting.md)
+- [Search recordings and manage their expiry](recordings/README.md)
 - [Configure motion detection and inspect events](motion/events.md)
 
 ### I want to contribute
@@ -37,6 +39,7 @@ day-two operations, architecture, and contribution workflows.
 | Getting started | [Project quick start](../README.md#quick-start) | First deployment and service URLs |
 | Reference | [Configuration](reference/configuration.md) | Environment variables, defaults, exposure, and restart scope |
 | Cameras | [RTSP cameras](cameras/rtsp.md) | Stream paths, codecs, live viewing, and camera diagnostics |
+| Recordings | [Recording library](recordings/README.md) | Date/time filtering, playback, downloads, pagination, API, and retention |
 | Motion | [Motion detection and events](motion/events.md) | Detector settings, event lifecycle, API, and limitations |
 | Operations | [Upgrades](operations/upgrades.md) | Backups, migrations, verification, and rollback considerations |
 | Operations | [Troubleshooting](operations/troubleshooting.md) | Symptom-first incident checks and diagnostic commands |

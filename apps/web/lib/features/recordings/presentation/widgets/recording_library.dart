@@ -152,13 +152,10 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 16,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final heading = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Recording library',
@@ -166,20 +163,36 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  RecordingDateFilterControl(
-                    from: widget.filterFrom,
-                    to: widget.filterTo,
-                    onApply: widget.onApplyDateFilter,
-                    onClear: widget.onClearDateFilter,
+                  const SizedBox(height: 5),
+                  const Text(
+                    'Browse, preview, download, and control how long finalized footage is retained.',
+                    style: TextStyle(color: Colors.white54),
                   ),
                 ],
-              ),
-              const SizedBox(height: 5),
-              const Text(
-                'Browse, preview, download, and control how long finalized footage is retained.',
-                style: TextStyle(color: Colors.white54),
-              ),
-            ],
+              );
+              final filter = RecordingDateFilterControl(
+                from: widget.filterFrom,
+                to: widget.filterTo,
+                onApply: widget.onApplyDateFilter,
+                onClear: widget.onClearDateFilter,
+              );
+
+              if (constraints.maxWidth < 700) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [heading, const SizedBox(height: 12), filter],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: heading),
+                  const SizedBox(width: 16),
+                  filter,
+                ],
+              );
+            },
           ),
         ),
         Expanded(
