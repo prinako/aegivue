@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 
+import 'package:aegivue/core/theme/app_theme.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_card.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_library.dart';
@@ -44,6 +45,36 @@ void main() {
 
     expect(find.byType(RecordingCard), findsWidgets);
     expect(find.byType(RecordingCard).evaluate().length, lessThan(20));
+  });
+
+  testWidgets('shows the date filter at the right edge of a desktop header', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.build(),
+        home: Scaffold(
+          body: RecordingLibrary(
+            recordings: const [],
+            onRefresh: () async {},
+            onLoadMore: () async {},
+            onSetExpiry: (_, _) async {},
+            hasMore: false,
+            loadingMore: false,
+            updatingExpiry: false,
+          ),
+        ),
+      ),
+    );
+
+    final filter = find.widgetWithText(OutlinedButton, 'Filter by date');
+    expect(filter.hitTestable(), findsOneWidget);
+    expect(tester.getTopRight(filter).dx, closeTo(1176, 1));
   });
 
   testWidgets(
