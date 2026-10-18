@@ -210,10 +210,7 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
                       child: Center(
                         child: Text(
                           'All recordings loaded',
-                          style: TextStyle(
-                            color: Colors.white38,
-                            fontSize: 11,
-                          ),
+                          style: TextStyle(color: Colors.white38, fontSize: 11),
                         ),
                       ),
                     ),
