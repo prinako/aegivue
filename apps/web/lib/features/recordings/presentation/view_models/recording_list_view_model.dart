@@ -22,6 +22,7 @@ class RecordingListViewModel extends ChangeNotifier {
   int _totalItems = 0;
   DateTime? _from;
   DateTime? _to;
+  Set<String> _cameraIds = const {};
   Future<void>? _expiryOperation;
   bool _disposed = false;
 
@@ -36,6 +37,7 @@ class RecordingListViewModel extends ChangeNotifier {
   int get totalItems => _totalItems;
   DateTime? get from => _from;
   DateTime? get to => _to;
+  Set<String> get cameraIds => _cameraIds;
 
   Future<void> load() => _reload();
 
@@ -53,6 +55,16 @@ class RecordingListViewModel extends ChangeNotifier {
   Future<void> clearDateFilter() async {
     _from = null;
     _to = null;
+    await _reload();
+  }
+
+  Future<void> applyCameraFilter(Set<String> cameraIds) async {
+    _cameraIds = Set<String>.unmodifiable(cameraIds);
+    await _reload();
+  }
+
+  Future<void> clearCameraFilter() async {
+    _cameraIds = const {};
     await _reload();
   }
 
@@ -77,6 +89,7 @@ class RecordingListViewModel extends ChangeNotifier {
         pageSize: _pageSize,
         from: _from,
         to: _to,
+        cameraIds: _cameraIds,
       );
       if (_disposed || generation != _reloadGeneration) return;
       _applyPage(page);
@@ -111,6 +124,7 @@ class RecordingListViewModel extends ChangeNotifier {
         pageSize: _pageSize,
         from: _from,
         to: _to,
+        cameraIds: _cameraIds,
       );
       if (_disposed || generation != _reloadGeneration) return;
       final existingIds = _items.map((item) => item.id).toSet();

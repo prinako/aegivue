@@ -14,12 +14,15 @@ class RecordingRepository {
     int pageSize = 25,
     DateTime? from,
     DateTime? to,
+    Set<String> cameraIds = const {},
   }) async {
+    final sortedCameraIds = cameraIds.toList()..sort();
     final queryParameters = <String, String>{
       'page': '$page',
       'pageSize': '$pageSize',
       if (from != null) 'from': from.toUtc().toIso8601String(),
       if (to != null) 'to': to.toUtc().toIso8601String(),
+      if (sortedCameraIds.isNotEmpty) 'cameraIds': sortedCameraIds.join(','),
     };
     final uri = Uri(
       path: ApiEndpoints.recordings,

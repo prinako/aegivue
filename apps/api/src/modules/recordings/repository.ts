@@ -19,9 +19,10 @@ export interface RecordingView {
   createdAt: string;
 }
 
-export interface RecordingDateFilter {
+export interface RecordingFilter {
   from?: Date;
   to?: Date;
+  cameraIds?: string[];
 }
 
 const map = (row: Record<string, unknown>): RecordingView => ({
@@ -50,9 +51,9 @@ export class RecordingRepository {
   public async list(
     limit: number,
     offset: number,
-    filter: RecordingDateFilter = {},
+    filter: RecordingFilter = {},
   ): Promise<RecordingView[]> {
-    const { clause, values } = dateFilterQuery(filter);
+    const { clause, values } = recordingFilterQuery(filter);
     const limitParameter = values.length + 1;
     const offsetParameter = values.length + 2;
     const { rows } = await this.db.query(
@@ -61,8 +62,8 @@ export class RecordingRepository {
     );
     return rows.map(map);
   }
-  public async count(filter: RecordingDateFilter = {}): Promise<number> {
-    const { clause, values } = dateFilterQuery(filter);
+  public async count(filter: RecordingFilter = {}): Promise<number> {
+    const { clause, values } = recordingFilterQuery(filter);
     const sql = `SELECT count(*)::bigint AS count FROM recordings${clause}`;
     const result = values.length
       ? await this.db.query(sql, values)
@@ -103,12 +104,16 @@ export class RecordingRepository {
   }
 }
 
-function dateFilterQuery(filter: RecordingDateFilter): {
+function recordingFilterQuery(filter: RecordingFilter): {
   clause: string;
-  values: Date[];
+  values: (Date | string[])[];
 } {
   const conditions: string[] = [];
-  const values: Date[] = [];
+  const values: (Date | string[])[] = [];
+  if (filter.cameraIds) {
+    values.push(filter.cameraIds);
+    conditions.push(`camera_id = ANY($${String(values.length)}::varchar[])`);
+  }
   if (filter.from) {
     values.push(filter.from);
     conditions.push(`start_time >= $${String(values.length)}`);

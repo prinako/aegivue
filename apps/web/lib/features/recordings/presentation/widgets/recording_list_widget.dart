@@ -117,7 +117,12 @@ class _EmptyRecordingList extends StatelessWidget {
           children: [
             const Icon(Icons.video_library_outlined, color: Colors.white38),
             const SizedBox(width: 12),
-            Text(message, style: const TextStyle(color: Colors.white54)),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.white54),
+              ),
+            ),
           ],
         ),
       ),
