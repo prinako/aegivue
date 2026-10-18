@@ -147,74 +147,83 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: widget.onRefresh,
-      child: CustomScrollView(
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-            sliver: SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        'Recording library',
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      RecordingDateFilterControl(
-                        from: widget.filterFrom,
-                        to: widget.filterTo,
-                        onApply: widget.onApplyDateFilter,
-                        onClear: widget.onClearDateFilter,
-                      ),
-                    ],
+                  Text(
+                    'Recording library',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                  const SizedBox(height: 5),
-                  const Text(
-                    'Browse, preview, download, and control how long finalized footage is retained.',
-                    style: TextStyle(color: Colors.white54),
+                  RecordingDateFilterControl(
+                    from: widget.filterFrom,
+                    to: widget.filterTo,
+                    onApply: widget.onApplyDateFilter,
+                    onClear: widget.onClearDateFilter,
                   ),
                 ],
               ),
-            ),
-          ),
-          RecordingSliverGrid(
-            recordings: widget.recordings,
-            onOpen: _openRecording,
-            emptyMessage: widget.hasDateFilter
-                ? 'No recordings match this date filter.'
-                : 'No finalized recordings yet.',
-          ),
-          if (widget.loadingMore)
-            const SliverPadding(
-              padding: EdgeInsets.only(top: 24),
-              sliver: SliverToBoxAdapter(
-                child: Center(child: CircularProgressIndicator()),
+              const SizedBox(height: 5),
+              const Text(
+                'Browse, preview, download, and control how long finalized footage is retained.',
+                style: TextStyle(color: Colors.white54),
               ),
-            )
-          else if (!widget.hasMore && widget.recordings.isNotEmpty)
-            const SliverPadding(
-              padding: EdgeInsets.only(top: 24),
-              sliver: SliverToBoxAdapter(
-                child: Center(
-                  child: Text(
-                    'All recordings loaded',
-                    style: TextStyle(color: Colors.white38, fontSize: 11),
-                  ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: widget.onRefresh,
+            child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                RecordingSliverGrid(
+                  recordings: widget.recordings,
+                  onOpen: _openRecording,
+                  emptyMessage: widget.hasDateFilter
+                      ? 'No recordings match this date filter.'
+                      : 'No finalized recordings yet.',
                 ),
-              ),
+                if (widget.loadingMore)
+                  const SliverPadding(
+                    padding: EdgeInsets.only(top: 24),
+                    sliver: SliverToBoxAdapter(
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  )
+                else if (!widget.hasMore && widget.recordings.isNotEmpty)
+                  const SliverPadding(
+                    padding: EdgeInsets.only(top: 24),
+                    sliver: SliverToBoxAdapter(
+                      child: Center(
+                        child: Text(
+                          'All recordings loaded',
+                          style: TextStyle(
+                            color: Colors.white38,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                const SliverToBoxAdapter(child: SizedBox(height: 44)),
+              ],
             ),
-          const SliverToBoxAdapter(child: SizedBox(height: 44)),
-        ],
-      ),
+          ),
+        ),
+      ],
     );
   }
 }
