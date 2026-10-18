@@ -1,5 +1,6 @@
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_details_dialog.dart';
+import 'package:aegivue/features/recordings/presentation/widgets/recording_date_filter_control.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_expiry_sheet.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_list_widget.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,10 @@ class RecordingLibrary extends StatefulWidget {
     required this.hasMore,
     required this.loadingMore,
     required this.updatingExpiry,
+    this.filterFrom,
+    this.filterTo,
+    this.onApplyDateFilter = _ignoreDateFilter,
+    this.onClearDateFilter = _ignoreClearDateFilter,
   });
 
   final List<Recording> recordings;
@@ -24,6 +29,12 @@ class RecordingLibrary extends StatefulWidget {
   final bool hasMore;
   final bool loadingMore;
   final bool updatingExpiry;
+  final DateTime? filterFrom;
+  final DateTime? filterTo;
+  final ApplyRecordingDateFilter onApplyDateFilter;
+  final Future<void> Function() onClearDateFilter;
+
+  bool get hasDateFilter => filterFrom != null || filterTo != null;
 
   @override
   State<RecordingLibrary> createState() => _RecordingLibraryState();
@@ -148,11 +159,23 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Recording library',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'Recording library',
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      RecordingDateFilterControl(
+                        from: widget.filterFrom,
+                        to: widget.filterTo,
+                        onApply: widget.onApplyDateFilter,
+                        onClear: widget.onClearDateFilter,
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 5),
                   const Text(
@@ -166,6 +189,9 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
           RecordingSliverGrid(
             recordings: widget.recordings,
             onOpen: _openRecording,
+            emptyMessage: widget.hasDateFilter
+                ? 'No recordings match this date filter.'
+                : 'No finalized recordings yet.',
           ),
           if (widget.loadingMore)
             const SliverPadding(
@@ -230,3 +256,7 @@ String _formatExpiry(DateTime value) {
   final month = local.month.toString().padLeft(2, '0');
   return '$day/$month/${local.year}';
 }
+
+Future<void> _ignoreDateFilter({DateTime? from, DateTime? to}) async {}
+
+Future<void> _ignoreClearDateFilter() async {}

@@ -9,12 +9,27 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { resolve, sep } from "node:path";
-import { RecordingRepository } from "./repository.js";
+import { RecordingRepository, type RecordingDateFilter } from "./repository.js";
 
-const pagination = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(25),
-});
+const pagination = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(25),
+    from: z.string().datetime({ offset: true }).optional(),
+    to: z.string().datetime({ offset: true }).optional(),
+  })
+  .superRefine((value, context) => {
+    if (
+      value.from &&
+      value.to &&
+      Date.parse(value.from) > Date.parse(value.to)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "From must not be after to",
+      });
+    }
+  });
 const recordingId = z.string().uuid();
 const expiryUpdate = z.object({
   expiresAt: z.string().datetime().nullable(),
@@ -150,13 +165,17 @@ export const recordingRoutes: FastifyPluginAsync<{
   app.get("/", async (request, reply) => {
     const parsed = pagination.safeParse(request.query);
     if (!parsed.success)
-      return reply
-        .code(400)
-        .send({ code: "VALIDATION_ERROR", message: "Invalid pagination" });
+      return reply.code(400).send({
+        code: "VALIDATION_ERROR",
+        message: "Invalid recording filters",
+      });
     const offset = (parsed.data.page - 1) * parsed.data.pageSize;
+    const filter: RecordingDateFilter = {};
+    if (parsed.data.from) filter.from = new Date(parsed.data.from);
+    if (parsed.data.to) filter.to = new Date(parsed.data.to);
     const [items, totalItems] = await Promise.all([
-      repository.list(parsed.data.pageSize, offset),
-      repository.count(),
+      repository.list(parsed.data.pageSize, offset, filter),
+      repository.count(filter),
     ]);
     return {
       items,

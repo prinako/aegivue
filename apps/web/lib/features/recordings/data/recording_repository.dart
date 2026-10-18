@@ -9,12 +9,23 @@ class RecordingRepository {
 
   Future<List<Recording>> list() async => (await listPage()).items;
 
-  Future<RecordingPage> listPage({int page = 1, int pageSize = 25}) async {
-    final json =
-        await api.getJson(
-              '${ApiEndpoints.recordings}?page=$page&pageSize=$pageSize',
-            )
-            as Map<String, Object?>;
+  Future<RecordingPage> listPage({
+    int page = 1,
+    int pageSize = 25,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final queryParameters = <String, String>{
+      'page': '$page',
+      'pageSize': '$pageSize',
+      if (from != null) 'from': from.toUtc().toIso8601String(),
+      if (to != null) 'to': to.toUtc().toIso8601String(),
+    };
+    final uri = Uri(
+      path: ApiEndpoints.recordings,
+      queryParameters: queryParameters,
+    );
+    final json = await api.getJson(uri.toString()) as Map<String, Object?>;
 
     return RecordingPage(
       items: (json['items']! as List<Object?>)

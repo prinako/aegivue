@@ -52,18 +52,22 @@ class RecordingSliverGrid extends StatelessWidget {
     required this.recordings,
     required this.onOpen,
     this.selectedId,
+    this.emptyMessage = 'No finalized recordings yet.',
   });
 
   final List<Recording> recordings;
   final ValueChanged<Recording> onOpen;
   final String? selectedId;
+  final String emptyMessage;
 
   @override
   Widget build(BuildContext context) {
     if (recordings.isEmpty) {
-      return const SliverPadding(
-        padding: EdgeInsets.symmetric(horizontal: 24),
-        sliver: SliverToBoxAdapter(child: _EmptyRecordingList()),
+      return SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        sliver: SliverToBoxAdapter(
+          child: _EmptyRecordingList(message: emptyMessage),
+        ),
       );
     }
 
@@ -100,21 +104,20 @@ class RecordingSliverGrid extends StatelessWidget {
 }
 
 class _EmptyRecordingList extends StatelessWidget {
-  const _EmptyRecordingList();
+  const _EmptyRecordingList({this.message = 'No finalized recordings yet.'});
+
+  final String message;
 
   @override
   Widget build(BuildContext context) {
-    return const Card(
+    return Card(
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         child: Row(
           children: [
-            Icon(Icons.video_library_outlined, color: Colors.white38),
-            SizedBox(width: 12),
-            Text(
-              'No finalized recordings yet.',
-              style: TextStyle(color: Colors.white54),
-            ),
+            const Icon(Icons.video_library_outlined, color: Colors.white38),
+            const SizedBox(width: 12),
+            Text(message, style: const TextStyle(color: Colors.white54)),
           ],
         ),
       ),
