@@ -166,10 +166,10 @@ async function sendRecordingMedia(
   }
 }
 
-export const recordingRoutes: FastifyPluginAsync<{
-  storagePath: string;
-}> = async (app, options) => {
-  const repository = new RecordingRepository(app.db);
+function registerRecordingListRoute(
+  app: FastifyInstance,
+  repository: RecordingRepository,
+) {
   app.get("/", async (request, reply) => {
     const parsed = pagination.safeParse(request.query);
     if (!parsed.success)
@@ -194,6 +194,12 @@ export const recordingRoutes: FastifyPluginAsync<{
       totalPages: Math.ceil(totalItems / parsed.data.pageSize),
     };
   });
+}
+
+function registerRecordingDetailsRoute(
+  app: FastifyInstance,
+  repository: RecordingRepository,
+) {
   app.get("/:id", async (request, reply) => {
     const parsed = recordingId.safeParse((request.params as { id: string }).id);
     if (!parsed.success)
@@ -208,6 +214,12 @@ export const recordingRoutes: FastifyPluginAsync<{
         .send({ code: "NOT_FOUND", message: "Recording not found" })
     );
   });
+}
+
+function registerRecordingExpiryRoute(
+  app: FastifyInstance,
+  repository: RecordingRepository,
+) {
   app.patch("/:id/expiry", async (request, reply) => {
     const id = recordingId.safeParse((request.params as { id: string }).id);
     const body = expiryUpdate.safeParse(request.body);
@@ -236,6 +248,13 @@ export const recordingRoutes: FastifyPluginAsync<{
         .send({ code: "NOT_FOUND", message: "Recording not found" })
     );
   });
+}
+
+function registerRecordingThumbnailRoute(
+  app: FastifyInstance,
+  repository: RecordingRepository,
+  storagePath: string,
+) {
   app.get("/:id/thumbnail", async (request, reply) => {
     const parsed = recordingId.safeParse((request.params as { id: string }).id);
     if (!parsed.success)
@@ -249,17 +268,21 @@ export const recordingRoutes: FastifyPluginAsync<{
         .code(404)
         .send({ code: "NOT_FOUND", message: "Recording not found" });
 
-    // const root = resolve(options.storagePath);
-    // const file = resolve(root, recording.filePath);
     const file = await resolveRecordingFile(
       reply,
-      options.storagePath,
+      storagePath,
       recording.filePath,
     );
     if (!file) return;
     return sendThumbnail(app, reply, file, parsed.data);
   });
+}
 
+function registerRecordingMediaRoute(
+  app: FastifyInstance,
+  repository: RecordingRepository,
+  storagePath: string,
+) {
   app.get("/:id/media", async (request, reply) => {
     const parsed = recordingId.safeParse((request.params as { id: string }).id);
     if (!parsed.success)
@@ -272,16 +295,25 @@ export const recordingRoutes: FastifyPluginAsync<{
         .code(404)
         .send({ code: "NOT_FOUND", message: "Recording not found" });
 
-    // const root = resolve(options.storagePath);
-    // const file = resolve(root, recording.filePath);
     const file = await resolveRecordingFile(
       reply,
-      options.storagePath,
+      storagePath,
       recording.filePath,
     );
     if (!file) return;
     return sendRecordingMedia(request, reply, file, recording.container);
   });
+}
+
+export const recordingRoutes: FastifyPluginAsync<{
+  storagePath: string;
+}> = async (app, options) => {
+  const repository = new RecordingRepository(app.db);
+  registerRecordingListRoute(app, repository);
+  registerRecordingDetailsRoute(app, repository);
+  registerRecordingExpiryRoute(app, repository);
+  registerRecordingThumbnailRoute(app, repository, options.storagePath);
+  registerRecordingMediaRoute(app, repository, options.storagePath);
 };
 
 export function parseByteRange(
