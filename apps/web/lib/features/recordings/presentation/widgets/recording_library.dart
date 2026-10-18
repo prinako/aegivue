@@ -138,39 +138,55 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
   Widget build(BuildContext context) {
     return RefreshIndicator(
       onRefresh: widget.onRefresh,
-      child: ListView(
+      child: CustomScrollView(
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 44),
-        children: [
-          Text(
-            'Recording library',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Recording library',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  const Text(
+                    'Browse, preview, download, and control how long finalized footage is retained.',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 5),
-          const Text(
-            'Browse, preview, download, and control how long finalized footage is retained.',
-            style: TextStyle(color: Colors.white54),
-          ),
-          const SizedBox(height: 20),
-          RecordingListWidget(
+          RecordingSliverGrid(
             recordings: widget.recordings,
             onOpen: _openRecording,
           ),
-          if (widget.loadingMore) ...[
-            const SizedBox(height: 24),
-            const Center(child: CircularProgressIndicator()),
-          ] else if (!widget.hasMore && widget.recordings.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            const Center(
-              child: Text(
-                'All recordings loaded',
-                style: TextStyle(color: Colors.white38, fontSize: 11),
+          if (widget.loadingMore)
+            const SliverPadding(
+              padding: EdgeInsets.only(top: 24),
+              sliver: SliverToBoxAdapter(
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            )
+          else if (!widget.hasMore && widget.recordings.isNotEmpty)
+            const SliverPadding(
+              padding: EdgeInsets.only(top: 24),
+              sliver: SliverToBoxAdapter(
+                child: Center(
+                  child: Text(
+                    'All recordings loaded',
+                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                  ),
+                ),
               ),
             ),
-          ],
+          const SliverToBoxAdapter(child: SizedBox(height: 44)),
         ],
       ),
     );

@@ -88,10 +88,11 @@ class RecordingListViewModel extends ChangeNotifier {
       );
       if (_disposed || generation != _reloadGeneration) return;
       final existingIds = _items.map((item) => item.id).toSet();
-      _items = List<Recording>.unmodifiable([
-        ..._items,
-        ...nextPage.items.where((item) => !existingIds.contains(item.id)),
-      ]);
+      _items = List<Recording>.unmodifiable(
+        _items.followedBy(
+          nextPage.items.where((item) => existingIds.add(item.id)),
+        ),
+      );
       _page = nextPage.page;
       _hasMore = nextPage.hasMore;
       _totalItems = nextPage.totalItems;
