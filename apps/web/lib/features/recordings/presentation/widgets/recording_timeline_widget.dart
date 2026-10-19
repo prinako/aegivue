@@ -10,6 +10,7 @@ import 'package:aegivue/features/recordings/presentation/models/recording_playba
 import 'package:aegivue/features/recordings/presentation/view_models/recording_timeline_view_model.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/selected_recording_card.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_player.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 class RecordingTimelineWidget extends StatefulWidget {
@@ -176,6 +177,7 @@ class _RecordingTimelineWidgetState extends State<RecordingTimelineWidget> {
                     rows: rows,
                     now: widget.now,
                     onSelect: viewModel.selectAt,
+                    onScrub: viewModel.seekTo,
                     onNoFootage: viewModel.markNoFootage,
                   ),
                 ],
@@ -554,12 +556,14 @@ class _TimelineTable extends StatefulWidget {
     required this.rows,
     required this.now,
     required this.onSelect,
+    required this.onScrub,
     required this.onNoFootage,
   });
   final RecordingTimelineViewModel viewModel;
   final List<_CameraRow> rows;
   final DateTime Function() now;
   final Future<void> Function(RecordingTimelineInterval, DateTime) onSelect;
+  final Future<void> Function(DateTime) onScrub;
   final ValueChanged<DateTime> onNoFootage;
 
   @override
@@ -569,6 +573,92 @@ class _TimelineTable extends StatefulWidget {
 class _TimelineTableState extends State<_TimelineTable> {
   static const double _labelWidth = 136;
   static const double _axisHeight = 38;
+  static const double _dragThreshold = 4;
+
+  int? _scrubPointer;
+  double? _scrubStartX;
+  DateTime? _scrubPreview;
+  bool _scrubMoved = false;
+
+  void _startScrub(
+    PointerDownEvent event,
+    DateTime windowStart,
+    DateTime windowEnd,
+    double width,
+  ) {
+    if (_scrubPointer != null ||
+        (event.kind == PointerDeviceKind.mouse &&
+            event.buttons != kPrimaryMouseButton)) {
+      return;
+    }
+    _scrubPointer = event.pointer;
+    _scrubStartX = event.localPosition.dx;
+    _scrubMoved = false;
+    _setScrubPreview(event.localPosition.dx, windowStart, windowEnd, width);
+  }
+
+  void _moveScrub(
+    PointerMoveEvent event,
+    DateTime windowStart,
+    DateTime windowEnd,
+    double width,
+  ) {
+    if (event.pointer != _scrubPointer) return;
+    final startX = _scrubStartX;
+    if (startX == null ||
+        (event.localPosition.dx - startX).abs() < _dragThreshold) {
+      return;
+    }
+    _scrubMoved = true;
+    _setScrubPreview(event.localPosition.dx, windowStart, windowEnd, width);
+  }
+
+  void _finishScrub(
+    PointerUpEvent event,
+    DateTime windowStart,
+    DateTime windowEnd,
+    double width,
+  ) {
+    if (event.pointer != _scrubPointer) return;
+    final shouldSeek = _scrubMoved;
+    final timestamp = _timestampAt(
+      event.localPosition.dx,
+      windowStart,
+      windowEnd,
+      width,
+    );
+    _clearScrub();
+    if (shouldSeek) unawaited(widget.onScrub(timestamp));
+  }
+
+  void _cancelScrub(PointerCancelEvent event) {
+    if (event.pointer == _scrubPointer) _clearScrub();
+  }
+
+  void _setScrubPreview(
+    double x,
+    DateTime windowStart,
+    DateTime windowEnd,
+    double width,
+  ) {
+    final timestamp = _timestampAt(x, windowStart, windowEnd, width);
+    if (timestamp == _scrubPreview) return;
+    setState(() => _scrubPreview = timestamp);
+  }
+
+  void _clearScrub() {
+    _scrubPointer = null;
+    _scrubStartX = null;
+    _scrubMoved = false;
+    if (_scrubPreview != null) setState(() => _scrubPreview = null);
+  }
+
+  DateTime _timestampAt(
+    double x,
+    DateTime windowStart,
+    DateTime windowEnd,
+    double width,
+  ) => _atFraction(windowStart, windowEnd, (x / width).clamp(0.0, 1.0));
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -617,83 +707,153 @@ class _TimelineTableState extends State<_TimelineTable> {
               ),
             ),
             Expanded(
-              child: SizedBox(
-                width: timelineWidth,
-                child: Stack(
-                  clipBehavior: Clip.hardEdge,
-                  children: [
-                    Column(
-                      children: [
-                        _TimeAxis(
-                          width: timelineWidth,
-                          start: windowStart,
-                          end: windowEnd,
-                          zoom: widget.viewModel.zoom,
-                        ),
-                        for (final layout in layouts)
-                          _TimelineTrack(
-                            key: ValueKey(
-                              'timeline-track-${layout.row.cameraId}',
-                            ),
-                            layout: layout,
+              child: Listener(
+                key: const ValueKey('timeline-scrub-surface'),
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (event) =>
+                    _startScrub(event, windowStart, windowEnd, timelineWidth),
+                onPointerMove: (event) =>
+                    _moveScrub(event, windowStart, windowEnd, timelineWidth),
+                onPointerUp: (event) =>
+                    _finishScrub(event, windowStart, windowEnd, timelineWidth),
+                onPointerCancel: _cancelScrub,
+                child: SizedBox(
+                  width: timelineWidth,
+                  child: Stack(
+                    clipBehavior: Clip.hardEdge,
+                    children: [
+                      Column(
+                        children: [
+                          _TimeAxis(
                             width: timelineWidth,
                             start: windowStart,
                             end: windowEnd,
                             zoom: widget.viewModel.zoom,
-                            selectedIds: {
-                              for (final session
-                                  in widget.viewModel.sessions.values)
-                                ?session.interval?.recordingId,
-                            },
-                            onSelect: widget.onSelect,
-                            onNoFootage: widget.onNoFootage,
                           ),
-                      ],
-                    ),
-                    if (_isToday(widget.viewModel.dayStart, now) &&
-                        !now.isBefore(windowStart) &&
-                        now.isBefore(windowEnd))
-                      Positioned(
-                        key: const ValueKey('timeline-current-time'),
-                        left: _position(
-                          now,
-                          windowStart,
-                          windowEnd,
-                          timelineWidth,
-                        ),
-                        top: 0,
-                        bottom: 0,
-                        child: Container(
-                          width: 2,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.tertiary.withValues(alpha: 0.75),
-                        ),
+                          for (final layout in layouts)
+                            _TimelineTrack(
+                              key: ValueKey(
+                                'timeline-track-${layout.row.cameraId}',
+                              ),
+                              layout: layout,
+                              width: timelineWidth,
+                              start: windowStart,
+                              end: windowEnd,
+                              zoom: widget.viewModel.zoom,
+                              selectedIds: {
+                                for (final session
+                                    in widget.viewModel.sessions.values)
+                                  ?session.interval?.recordingId,
+                              },
+                              onSelect: widget.onSelect,
+                              onNoFootage: widget.onNoFootage,
+                            ),
+                        ],
                       ),
-                    ValueListenableBuilder<RecordingPlaybackSnapshot>(
-                      valueListenable: widget.viewModel.playback,
-                      builder: (context, _, _) {
-                        final timestamp = widget.viewModel.playbackTimestamp;
-                        if (timestamp == null ||
-                            timestamp.isBefore(windowStart) ||
-                            !timestamp.isBefore(windowEnd)) {
-                          return const SizedBox.shrink();
-                        }
-                        return Positioned(
-                          key: const ValueKey('timeline-playback-playhead'),
+                      if (_isToday(widget.viewModel.dayStart, now) &&
+                          !now.isBefore(windowStart) &&
+                          now.isBefore(windowEnd))
+                        Positioned(
+                          key: const ValueKey('timeline-current-time'),
                           left: _position(
-                            timestamp,
+                            now,
                             windowStart,
                             windowEnd,
                             timelineWidth,
                           ),
                           top: 0,
                           bottom: 0,
-                          child: Container(width: 2, color: Colors.amberAccent),
-                        );
-                      },
-                    ),
-                  ],
+                          child: Container(
+                            width: 2,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.tertiary.withValues(alpha: 0.75),
+                          ),
+                        ),
+                      ValueListenableBuilder<RecordingPlaybackSnapshot>(
+                        valueListenable: widget.viewModel.playback,
+                        builder: (context, _, _) {
+                          final timestamp = widget.viewModel.playbackTimestamp;
+                          if (timestamp == null ||
+                              timestamp.isBefore(windowStart) ||
+                              !timestamp.isBefore(windowEnd)) {
+                            return const SizedBox.shrink();
+                          }
+                          return Positioned(
+                            key: const ValueKey('timeline-playback-playhead'),
+                            left: _position(
+                              timestamp,
+                              windowStart,
+                              windowEnd,
+                              timelineWidth,
+                            ),
+                            top: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 2,
+                              color: Colors.amberAccent,
+                            ),
+                          );
+                        },
+                      ),
+                      if (_scrubPreview case final preview?) ...[
+                        Positioned(
+                          key: const ValueKey('timeline-scrub-preview'),
+                          left: _position(
+                            preview,
+                            windowStart,
+                            windowEnd,
+                            timelineWidth,
+                          ),
+                          top: 0,
+                          bottom: 0,
+                          child: IgnorePointer(
+                            child: Container(
+                              width: 2,
+                              color: Theme.of(context).colorScheme.secondary,
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left:
+                              (_position(
+                                        preview,
+                                        windowStart,
+                                        windowEnd,
+                                        timelineWidth,
+                                      ) -
+                                      34)
+                                  .clamp(
+                                    0.0,
+                                    math.max(0.0, timelineWidth - 68),
+                                  ),
+                          top: 4,
+                          child: IgnorePointer(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.white24),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 3,
+                                ),
+                                child: Text(
+                                  _formatTimestamp(preview),
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),
