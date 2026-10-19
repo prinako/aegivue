@@ -4,6 +4,7 @@ import 'package:aegivue/core/api/api_client.dart';
 import 'package:aegivue/features/recordings/data/recording_repository.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:aegivue/features/recordings/domain/recording_timeline_interval.dart';
+import 'package:aegivue/features/recordings/presentation/models/recording_playback.dart';
 import 'package:aegivue/features/recordings/presentation/view_models/recording_timeline_view_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -158,15 +159,186 @@ void main() {
     viewModel.clearSelection();
     expect(viewModel.selectedRecording, isNull);
   });
+
+  test('maps selection and video time to absolute timeline time', () async {
+    final repository = _FakeRepository();
+    final viewModel = RecordingTimelineViewModel(repository);
+    final interval = _interval('recording-1');
+
+    await viewModel.selectAt(
+      interval,
+      interval.startTime.add(const Duration(minutes: 3)),
+    );
+
+    expect(viewModel.selectedOffset, const Duration(minutes: 3));
+    expect(
+      viewModel.playbackTimestamp,
+      interval.startTime.add(const Duration(minutes: 3)),
+    );
+
+    viewModel.handlePlaybackEvent(
+      interval.recordingId,
+      const RecordingPlaybackEvent(
+        phase: RecordingPlaybackPhase.playing,
+        position: Duration(minutes: 4),
+        duration: Duration(minutes: 5),
+      ),
+    );
+
+    expect(
+      viewModel.playbackTimestamp,
+      interval.startTime.add(const Duration(minutes: 4)),
+    );
+  });
+
+  test(
+    'tracks pause and resume without notifying the whole timeline',
+    () async {
+      final viewModel = RecordingTimelineViewModel(_FakeRepository());
+      final interval = _interval('recording-1');
+      await viewModel.select(interval);
+      var timelineNotifications = 0;
+      viewModel.addListener(() => timelineNotifications++);
+
+      viewModel.handlePlaybackEvent(
+        interval.recordingId,
+        const RecordingPlaybackEvent(
+          phase: RecordingPlaybackPhase.paused,
+          position: Duration(seconds: 30),
+        ),
+      );
+      expect(viewModel.playback.value.phase, RecordingPlaybackPhase.paused);
+      viewModel.handlePlaybackEvent(
+        interval.recordingId,
+        const RecordingPlaybackEvent(
+          phase: RecordingPlaybackPhase.playing,
+          position: Duration(seconds: 31),
+        ),
+      );
+
+      expect(viewModel.playback.value.phase, RecordingPlaybackPhase.playing);
+      expect(timelineNotifications, 0);
+    },
+  );
+
+  test(
+    'ignores playback events from a previously selected recording',
+    () async {
+      final viewModel = RecordingTimelineViewModel(_FakeRepository());
+      final first = _interval('recording-1');
+      final second = _interval(
+        'recording-2',
+        start: DateTime.utc(2026, 10, 18, 13),
+        end: DateTime.utc(2026, 10, 18, 13, 5),
+      );
+      await viewModel.select(first);
+      await viewModel.select(second);
+
+      viewModel.handlePlaybackEvent(
+        first.recordingId,
+        const RecordingPlaybackEvent(
+          phase: RecordingPlaybackPhase.playing,
+          position: Duration(minutes: 4),
+        ),
+      );
+
+      expect(viewModel.selectedRecording?.id, second.recordingId);
+      expect(viewModel.playback.value.phase, RecordingPlaybackPhase.loading);
+      expect(viewModel.playback.value.position, Duration.zero);
+    },
+  );
+
+  test('a stale recording detail cannot replace a newer selection', () async {
+    final firstResult = Completer<Recording>();
+    final repository = _FakeRepository()
+      ..findOverride = (id) => id == 'recording-1'
+          ? firstResult.future
+          : Future.value(_recording(id));
+    final viewModel = RecordingTimelineViewModel(repository);
+    final first = _interval('recording-1');
+    final second = _interval(
+      'recording-2',
+      start: DateTime.utc(2026, 10, 18, 13),
+      end: DateTime.utc(2026, 10, 18, 13, 5),
+    );
+
+    final staleSelection = viewModel.select(first);
+    await viewModel.select(second);
+    firstResult.complete(_recording(first.recordingId));
+    await staleSelection;
+
+    expect(viewModel.selectedRecording?.id, second.recordingId);
+  });
+
+  test('filter refresh closes playback when its interval is removed', () async {
+    final interval = _interval('recording-1');
+    final repository = _FakeRepository()..nextResult = Future.value([interval]);
+    final viewModel = RecordingTimelineViewModel(
+      repository,
+      now: () => DateTime(2026, 10, 18),
+    );
+    await viewModel.load();
+    await viewModel.select(interval);
+    repository.nextResult = Future.value(const []);
+
+    await viewModel.syncFilters(cameraIds: {'garage'});
+
+    expect(viewModel.selectedRecording, isNull);
+    expect(viewModel.selectedInterval, isNull);
+    expect(viewModel.playback.value.phase, RecordingPlaybackPhase.idle);
+  });
+
+  test(
+    'navigates same-camera recordings in timestamp order across gaps and overlaps',
+    () async {
+      final repository = _FakeRepository()
+        ..nextResult = Future.value([
+          _interval(
+            'last',
+            start: DateTime.utc(2026, 10, 18, 14),
+            end: DateTime.utc(2026, 10, 18, 14, 5),
+          ),
+          _interval('first'),
+          _interval(
+            'overlap',
+            start: DateTime.utc(2026, 10, 18, 12, 2),
+            end: DateTime.utc(2026, 10, 18, 12, 7),
+          ),
+          _interval(
+            'other-camera',
+            cameraId: 'garage',
+            start: DateTime.utc(2026, 10, 18, 13),
+            end: DateTime.utc(2026, 10, 18, 13, 5),
+          ),
+        ]);
+      final viewModel = RecordingTimelineViewModel(
+        repository,
+        now: () => DateTime(2026, 10, 18),
+      );
+      await viewModel.load();
+      await viewModel.select(repository.lastResult[1]);
+
+      expect(viewModel.previousRecording, isNull);
+      expect(viewModel.nextRecording?.recordingId, 'overlap');
+      await viewModel.selectNext();
+      expect(viewModel.nextRecording?.recordingId, 'last');
+      await viewModel.selectNext();
+      expect(viewModel.nextRecording, isNull);
+      await viewModel.selectPrevious();
+      expect(viewModel.selectedRecording?.id, 'overlap');
+    },
+  );
 }
 
 class _FakeRepository extends RecordingRepository {
   _FakeRepository() : super(ApiClient());
 
   Future<List<RecordingTimelineInterval>> nextResult = Future.value(const []);
+  List<RecordingTimelineInterval> lastResult = const [];
   final List<({DateTime from, DateTime to, Set<String> cameraIds})> requests =
       [];
   final List<String> selectedIds = [];
+  Future<Recording> Function(String id)? findOverride;
 
   @override
   Future<List<RecordingTimelineInterval>> timeline({
@@ -175,26 +347,37 @@ class _FakeRepository extends RecordingRepository {
     Set<String> cameraIds = const {},
   }) {
     requests.add((from: from, to: to, cameraIds: Set.of(cameraIds)));
-    return nextResult;
+    return nextResult.then((value) {
+      lastResult = value;
+      return value;
+    });
   }
 
   @override
   Future<Recording> find(String id) async {
     selectedIds.add(id);
-    return Recording(
-      id: id,
-      cameraId: 'front-door',
-      startTime: DateTime.utc(2026, 10, 18, 12),
-      endTime: DateTime.utc(2026, 10, 18, 12, 5),
-      container: 'mp4',
-      playbackUrl: '/$id.mp4',
-    );
+    final override = findOverride;
+    return override == null ? _recording(id) : override(id);
   }
 }
 
-RecordingTimelineInterval _interval(String id) => RecordingTimelineInterval(
-  recordingId: id,
+Recording _recording(String id) => Recording(
+  id: id,
   cameraId: 'front-door',
   startTime: DateTime.utc(2026, 10, 18, 12),
   endTime: DateTime.utc(2026, 10, 18, 12, 5),
+  container: 'mp4',
+  playbackUrl: '/$id.mp4',
+);
+
+RecordingTimelineInterval _interval(
+  String id, {
+  String cameraId = 'front-door',
+  DateTime? start,
+  DateTime? end,
+}) => RecordingTimelineInterval(
+  recordingId: id,
+  cameraId: cameraId,
+  startTime: start ?? DateTime.utc(2026, 10, 18, 12),
+  endTime: end ?? DateTime.utc(2026, 10, 18, 12, 5),
 );

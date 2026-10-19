@@ -11,6 +11,7 @@ import 'package:aegivue/features/cameras/domain/camera_recording_config.dart';
 import 'package:aegivue/features/recordings/data/recording_repository.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:aegivue/features/recordings/domain/recording_timeline_interval.dart';
+import 'package:aegivue/features/recordings/presentation/models/recording_playback.dart';
 import 'package:aegivue/features/recordings/presentation/view_models/recording_timeline_view_model.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_library.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_header_actions.dart';
@@ -38,6 +39,18 @@ void main() {
     await tester.tap(find.text('Grid'));
     await tester.pump();
     expect(find.text('No finalized recordings yet.'), findsOneWidget);
+  });
+
+  testWidgets('shows an empty playback workspace before selection', (
+    tester,
+  ) async {
+    final viewModel = _viewModel(_TimelineRepository());
+    await viewModel.load();
+
+    await tester.pumpWidget(_timeline(viewModel));
+
+    expect(find.text('Select footage to begin playback.'), findsOneWidget);
+    expect(find.byType(RecordingPlayer), findsNothing);
   });
 
   testWidgets('shows camera rows and positions intervals from timestamps', (
@@ -277,10 +290,178 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Selected recording'), findsOneWidget);
+    expect(find.text('Front Door'), findsWidgets);
     expect(find.byType(SelectedRecordingCard), findsOneWidget);
     expect(find.byType(RecordingPlayer), findsOneWidget);
     expect(repository.selectedIds, ['recording-1']);
+  });
+
+  testWidgets('segment click seeks to its represented timestamp', (
+    tester,
+  ) async {
+    final repository = _TimelineRepository()
+      ..result = Future.value([
+        _interval(
+          'recording-1',
+          start: DateTime(2026, 10, 18, 12),
+          end: DateTime(2026, 10, 18, 12, 5),
+        ),
+      ]);
+    final viewModel = _viewModel(repository);
+    await viewModel.load();
+    viewModel.setZoom(RecordingTimelineZoom.oneHour);
+    await tester.pumpWidget(_timeline(viewModel));
+
+    final segment = find.byKey(const ValueKey('timeline-segment-recording-1'));
+    final rect = tester.getRect(segment);
+    await tester.tapAt(Offset(rect.left + rect.width * 0.6, rect.center.dy));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('12:03:00'), findsOneWidget);
+  });
+
+  testWidgets('positions the playback playhead consistently across zooms', (
+    tester,
+  ) async {
+    final interval = _interval('recording-1');
+    final repository = _TimelineRepository()..result = Future.value([interval]);
+    final viewModel = _viewModel(repository);
+    await viewModel.load();
+    await viewModel.select(interval);
+    viewModel.handlePlaybackEvent(
+      interval.recordingId,
+      const RecordingPlaybackEvent(
+        phase: RecordingPlaybackPhase.playing,
+        position: Duration(minutes: 3),
+      ),
+    );
+    await tester.pumpWidget(_timeline(viewModel));
+
+    final dayLeft = tester
+        .widget<Positioned>(
+          find.byKey(const ValueKey('timeline-playback-playhead')),
+        )
+        .left!;
+    viewModel.setZoom(RecordingTimelineZoom.sixHours);
+    await tester.pump();
+    final zoomedLeft = tester
+        .widget<Positioned>(
+          find.byKey(const ValueKey('timeline-playback-playhead')),
+        )
+        .left!;
+
+    expect(zoomedLeft, closeTo(dayLeft * 4, 0.01));
+  });
+
+  testWidgets('reports a clicked gap without selecting unrelated footage', (
+    tester,
+  ) async {
+    final repository = _TimelineRepository()
+      ..result = Future.value([_interval('recording-1')]);
+    final viewModel = _viewModel(repository);
+    await viewModel.load();
+    await tester.pumpWidget(_timeline(viewModel));
+    final gap = find.byKey(const ValueKey('timeline-gap-front-door'));
+    final rect = tester.getRect(gap);
+
+    await tester.tapAt(Offset(rect.left + 10, rect.center.dy));
+    await tester.pump();
+
+    expect(find.textContaining('No footage is available at'), findsOneWidget);
+    expect(repository.selectedIds, isEmpty);
+    expect(find.byType(RecordingPlayer), findsNothing);
+  });
+
+  testWidgets('shows playback state and closes the integrated player', (
+    tester,
+  ) async {
+    final interval = _interval('recording-1');
+    final repository = _TimelineRepository()..result = Future.value([interval]);
+    final viewModel = _viewModel(repository);
+    await viewModel.load();
+    await viewModel.select(interval);
+    await tester.pumpWidget(_timeline(viewModel));
+
+    expect(find.textContaining('Loading'), findsOneWidget);
+    viewModel.handlePlaybackEvent(
+      interval.recordingId,
+      const RecordingPlaybackEvent(
+        phase: RecordingPlaybackPhase.paused,
+        position: Duration(seconds: 20),
+      ),
+    );
+    await tester.pump();
+    expect(find.textContaining('Paused'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Close player'));
+    await tester.pump();
+    expect(find.byType(RecordingPlayer), findsNothing);
+    expect(find.text('Select footage to begin playback.'), findsOneWidget);
+  });
+
+  testWidgets('shows recording-detail loading and error states', (
+    tester,
+  ) async {
+    final detail = Completer<Recording>();
+    final repository = _TimelineRepository()
+      ..result = Future.value([_interval('recording-1')])
+      ..findOverride = (_) => detail.future;
+    final viewModel = _viewModel(repository);
+    await viewModel.load();
+    await tester.pumpWidget(_timeline(viewModel));
+
+    await tester.tap(
+      find.byKey(const ValueKey('timeline-coverage-front-door')),
+    );
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    detail.completeError(StateError('missing'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unable to open the selected recording.'), findsOneWidget);
+  });
+
+  testWidgets('navigates recordings chronologically on the selected camera', (
+    tester,
+  ) async {
+    final repository = _TimelineRepository()
+      ..result = Future.value([
+        _interval(
+          'recording-2',
+          start: DateTime(2026, 10, 18, 13),
+          end: DateTime(2026, 10, 18, 13, 5),
+        ),
+        _interval(
+          'recording-1',
+          start: DateTime(2026, 10, 18, 12),
+          end: DateTime(2026, 10, 18, 12, 5),
+        ),
+      ]);
+    final viewModel = _viewModel(repository);
+    await viewModel.load();
+    await viewModel.select(repository.resultIntervals.last);
+    await tester.pumpWidget(_timeline(viewModel));
+
+    expect(find.byTooltip('Previous recording'), findsOneWidget);
+    final previous = tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byTooltip('Previous recording'),
+        matching: find.byType(IconButton),
+      ),
+    );
+    expect(previous.onPressed, isNull);
+
+    await tester.tap(find.byTooltip('Next recording'));
+    await tester.pumpAndSettle();
+
+    expect(repository.selectedIds, ['recording-1', 'recording-2']);
+    final next = tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byTooltip('Next recording'),
+        matching: find.byType(IconButton),
+      ),
+    );
+    expect(next.onPressed, isNull);
   });
 
   testWidgets('shows loading, empty, and error states', (tester) async {
@@ -307,13 +488,17 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final viewModel = _viewModel(_TimelineRepository());
+    final interval = _interval('recording-1');
+    final repository = _TimelineRepository()..result = Future.value([interval]);
+    final viewModel = _viewModel(repository);
     await viewModel.load();
+    await viewModel.select(interval);
 
     await tester.pumpWidget(_timeline(viewModel));
 
     expect(find.byType(SingleChildScrollView), findsWidgets);
     expect(find.text('Today').hitTestable(), findsOneWidget);
+    expect(find.byType(RecordingPlayer), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -412,9 +597,11 @@ class _TimelineRepository extends RecordingRepository {
   _TimelineRepository() : super(ApiClient());
 
   Future<List<RecordingTimelineInterval>> result = Future.value(const []);
+  List<RecordingTimelineInterval> resultIntervals = const [];
   final List<({DateTime from, DateTime to, Set<String> cameraIds})> requests =
       [];
   final List<String> selectedIds = [];
+  Future<Recording> Function(String id)? findOverride;
 
   @override
   Future<List<RecordingTimelineInterval>> timeline({
@@ -423,12 +610,17 @@ class _TimelineRepository extends RecordingRepository {
     Set<String> cameraIds = const {},
   }) {
     requests.add((from: from, to: to, cameraIds: Set.of(cameraIds)));
-    return result;
+    return result.then((items) {
+      resultIntervals = items;
+      return items;
+    });
   }
 
   @override
   Future<Recording> find(String id) async {
     selectedIds.add(id);
+    final override = findOverride;
+    if (override != null) return override(id);
     return Recording(
       id: id,
       cameraId: 'front-door',

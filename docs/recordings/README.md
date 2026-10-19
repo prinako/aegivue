@@ -53,10 +53,24 @@ with the displayed local day. Timeline navigation and zoom do not rewrite or
 clear those filters, so returning to Grid preserves the user's exact search.
 The browser converts the resulting interval bounds to UTC for the API.
 
-Selecting an interval loads only that recording into the existing player; the
-timeline does not create a video element per segment. Continuous playback
-across recording files and seeking the player to the exact position clicked on
-a coverage track are not implemented in this version.
+Selecting an interval opens that recording in the playback workspace below the
+timeline; the timeline does not create a video element per segment. The header
+shows the recording range, current playback timestamp, and media state. A
+distinct amber playhead follows the video's current position without replacing
+today's wall-clock marker.
+
+Clicking within an individual or merged coverage segment seeks to the
+represented timestamp. If media metadata is still loading, the player queues
+the seek and applies it when the playable duration is known. Browser seeking
+can land on the nearest decodable frame rather than the exact requested
+millisecond, depending on the recording's keyframes and codec. Clicking a gap
+clears the player and reports that no footage exists at that timestamp.
+
+Previous and next controls move chronologically through recordings from the
+selected camera, including recordings separated by gaps or overlapping in
+time. Overlaps reflect the indexed interval metadata and remain independently
+selectable; the timeline does not alter files or storage metadata to remove
+them. Playback does not automatically continue across files or camera gaps.
 
 ## Searching recordings
 
