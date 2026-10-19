@@ -22,7 +22,7 @@ export async function sendMeasuredFragment(
   try {
     const info = await stat(file);
     if (!info.isFile() || !info.size || !file.endsWith(".mp4")) {
-      return reply.code(404).send({ code: "FILE_NOT_FOUND" });
+      return await reply.code(404).send({ code: "FILE_NOT_FOUND" });
     }
   } catch {
     return reply.code(404).send({ code: "FILE_NOT_FOUND" });
@@ -106,7 +106,7 @@ export async function sendMeasuredFragment(
       tracks: timings,
     });
     // Encode JSON in base64url to make a safe compact single HTTP header.
-    return reply
+    return await reply
       .header("Content-Type", "video/mp4")
       .header("Cache-Control", "private, no-store")
       .header("X-Content-Type-Options", "nosniff")
@@ -127,8 +127,8 @@ export async function sendMeasuredFragment(
             : message.includes("MP4") || message.includes("fragment")
               ? 422
               : 502;
-    if (reply.raw.destroyed || request.raw.aborted) return;
-    return reply.code(code).send({
+    if (reply.raw.destroyed || request.raw.destroyed) return;
+    return await reply.code(code).send({
       code: message === "CLIENT_ABORTED" ? message : "FRAGMENT_UNAVAILABLE",
     });
   } finally {
