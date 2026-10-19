@@ -106,13 +106,19 @@ export function readFragmentTimings(data: Buffer): TrackTiming[] {
       if (!scale) throw new Error("Unknown fragment track");
       if (h.flags & 0x000001) pos += 8;
       if (h.flags & 0x000002) pos += 4;
-      const defaultDuration = h.flags & 0x000008 ? u32(data, pos, tfhd.end) : undefined;
+      let defaultDuration: number | undefined;
+      if (h.flags & 0x000008) {
+        defaultDuration = u32(data, pos, tfhd.end);
+        pos += 4;
+      }
       let decode = d.version === 1 ? u64(data, d.offset, tfdt.end) : BigInt(u32(data, d.offset, tfdt.end));
       if (d.version !== 0 && d.version !== 1) throw new Error("Unsupported tfdt version");
       const initialDecode = decode;
       if (h.flags & 0x000010) pos += 4;
       if (h.flags & 0x000020) pos += 4;
       if (pos > tfhd.end) throw new Error("Truncated tfhd");
+      if ((h.flags & 0x000001) && h.offset + 12 > tfhd.end)
+        throw new Error("Truncated tfhd base data offset");
       let firstPts: number | undefined;
       let endPts: number | undefined;
       let count = 0;
