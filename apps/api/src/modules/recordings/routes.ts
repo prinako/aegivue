@@ -354,7 +354,11 @@ function registerRecordingFragmentRoute(
         message: "MP4 recording not found",
       });
     }
-    const file = await resolveRecordingFile(reply, storagePath, recording.filePath);
+    const file = await resolveRecordingFile(
+      reply,
+      storagePath,
+      recording.filePath,
+    );
     if (!file) return;
     return sendFragmentedRecording(app, request, reply, file, query.data);
   });
@@ -369,13 +373,22 @@ function registerMeasuredFragmentRoute(
     const id = recordingId.safeParse((request.params as { id: string }).id);
     const query = fragmentQuery.safeParse(request.query);
     if (!id.success || !query.success) {
-      return reply.code(400).send({ code: "VALIDATION_ERROR", message: "Invalid fragment request" });
+      return reply.code(400).send({
+        code: "VALIDATION_ERROR",
+        message: "Invalid fragment request",
+      });
     }
     const recording = await repository.findFile(id.data);
     if (!recording || recording.container !== "mp4") {
-      return reply.code(404).send({ code: "NOT_FOUND", message: "MP4 recording not found" });
+      return reply
+        .code(404)
+        .send({ code: "NOT_FOUND", message: "MP4 recording not found" });
     }
-    const file = await resolveRecordingFile(reply, storagePath, recording.filePath);
+    const file = await resolveRecordingFile(
+      reply,
+      storagePath,
+      recording.filePath,
+    );
     if (!file) return;
     return sendMeasuredFragment(request, reply, file, query.data);
   });
