@@ -34,7 +34,7 @@ const fixture = (compositionOffset = 0) => {
   const tfdt = full("tfdt", 0, 0, n(5000));
   const cto = Buffer.alloc(4);
   cto.writeInt32BE(compositionOffset);
-  const trun = full("trun", 1, 0x000800, n(2), cto, Buffer.alloc(4));
+  const trun = full("trun", 1, 0x000800, n(2), cto, cto);
   const moof = box("moof", box("traf", tfhd, tfdt, trun));
   return Buffer.concat([moov, moof]);
 };
