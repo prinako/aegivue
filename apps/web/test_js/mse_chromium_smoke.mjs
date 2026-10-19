@@ -43,10 +43,17 @@ try {
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
   const address = server.address();
   assert(address && typeof address !== 'string');
-  browser = await chromium.launch({ headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
+  browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
   const page = await browser.newPage();
   page.on('pageerror', (e) => console.error('Browser error:', e));
   await page.goto(`http://127.0.0.1:${address.port}/mse_continuity_harness.html`);
+  const supported = await page.evaluate(() => ({
+    mse: typeof MediaSource !== 'undefined',
+    h264: typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('video/mp4; codecs="avc1.42C01E"'),
+    userAgent: navigator.userAgent,
+  }));
+  console.log('Browser codec capabilities:', supported);
+  assert.equal(supported.h264, true, 'Google Chrome must support H.264 MSE');
   const result = await page.evaluate(async () => window.runMseContinuity({
     mimeType: 'video/mp4; codecs="avc1.42C01E"',
     fragments: [
