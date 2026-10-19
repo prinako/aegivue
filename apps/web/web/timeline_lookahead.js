@@ -2,16 +2,14 @@
 // This does not infer codec compatibility or compress wall-clock gaps.
 class AegivueTimelineLookahead {
   constructor(coordinator, { aheadSeconds = 30, behindSeconds = 20,
-      maxQueued = 4, onError = () => {} } = {}) {
+      onError = () => {} } = {}) {
     if (!coordinator || typeof coordinator.enqueue !== 'function')
       throw new TypeError('Coordinator required');
-    if (!(aheadSeconds > 0 && behindSeconds >= 0 &&
-          Number.isInteger(maxQueued) && maxQueued > 0))
+    if (!(aheadSeconds > 0 && behindSeconds >= 0))
       throw new RangeError('Invalid buffer limits');
     this.coordinator = coordinator;
     this.aheadSeconds = aheadSeconds;
     this.behindSeconds = behindSeconds;
-    this.maxQueued = maxQueued;
     this.onError = onError;
     this.items = [];
     this.nextIndex = 0;
