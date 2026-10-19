@@ -38,3 +38,32 @@ describe("fragmented MP4 timing parser", () => {
     expect(() => readFragmentTimings(box("ftyp", Buffer.alloc(4)))).toThrow("Missing moov");
   });
 });
+
+describe("track-level trex sample-duration defaults", () => {
+  const sample = (defaultDuration: number, withTfhdDefault = false) => {
+    const tkhd = full("tkhd", 0, 0, n(0), n(0), n(1));
+    const mdhd = full("mdhd", 0, 0, n(0), n(0), n(1000));
+    const trex = full("trex", 0, 0, n(1), n(1), n(defaultDuration), n(0), n(0));
+    const moov = box("moov", box("trak", tkhd, box("mdia", mdhd)), box("mvex", trex));
+    const tfhd = full("tfhd", 0, withTfhdDefault ? 0x000008 : 0, n(1),
+      ...(withTfhdDefault ? [n(250)] : []));
+    const tfdt = full("tfdt", 0, 0, n(1000));
+    const trun = full("trun", 0, 0, n(2));
+    return Buffer.concat([moov, box("moof", box("traf", tfhd, tfdt, trun))]);
+  };
+
+  it("uses trex default durations when tfhd and trun omit them", () => {
+    expect(readFragmentTimings(sample(500))[0]).toMatchObject({
+      firstDecodeSeconds: 1, firstPresentationSeconds: 1,
+      endPresentationSeconds: 2, samples: 2,
+    });
+  });
+
+  it("gives tfhd sample durations precedence over trex", () => {
+    expect(readFragmentTimings(sample(500, true))[0]?.endPresentationSeconds).toBe(1.5);
+  });
+
+  it("rejects an unusable zero default duration", () => {
+    expect(() => readFragmentTimings(sample(0))).toThrow("Missing sample duration");
+  });
+});
