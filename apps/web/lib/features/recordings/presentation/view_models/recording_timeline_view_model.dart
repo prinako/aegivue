@@ -379,7 +379,10 @@ class RecordingTimelineViewModel extends ChangeNotifier {
         );
       }
     }
-    if (_playing && pending.values.every((session) => !session.hasFootage)) {
+    if (_playing &&
+        pending.values.every(
+          (session) => session.phase == RecordingCameraSessionPhase.noFootage,
+        )) {
       pause();
     }
     _sessions = Map.unmodifiable(pending);
