@@ -21,7 +21,7 @@ jobs:
         run: |
           mkdir -p .mse-smoke-runner
           npm install --prefix .mse-smoke-runner --no-save playwright@1.56.1
-          npx --prefix .mse-smoke-runner playwright install --with-deps chromium
+          npx --prefix .mse-smoke-runner playwright install --with-deps chrome
       - name: Run two-fragment Chromium test
         run: |
           ln -s ../../../.mse-smoke-runner/node_modules apps/web/test_js/node_modules
