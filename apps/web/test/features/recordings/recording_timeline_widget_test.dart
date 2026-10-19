@@ -324,6 +324,42 @@ void main() {
     expect(find.text('Shared time 12:03:00'), findsOneWidget);
   });
 
+  testWidgets('horizontal drag over a recording does not trigger a tap', (
+    tester,
+  ) async {
+    final repository = _TimelineRepository()
+      ..result = Future.value([
+        _interval(
+          'recording-1',
+          start: DateTime(2026, 10, 18, 12),
+          end: DateTime(2026, 10, 18, 13),
+        ),
+      ]);
+    final viewModel = _viewModel(repository);
+    await viewModel.load(cameraIds: {'front-door'});
+    viewModel.setZoom(RecordingTimelineZoom.oneHour);
+    await tester.pumpWidget(_timeline(viewModel));
+
+    final track = tester.getRect(
+      find.byKey(const ValueKey('timeline-track-front-door')),
+    );
+    final gesture = await tester.startGesture(
+      Offset(track.left + track.width * 0.2, track.center.dy),
+      kind: PointerDeviceKind.mouse,
+    );
+    await gesture.moveTo(
+      Offset(track.left + track.width * 0.4, track.center.dy),
+    );
+    await tester.pump();
+    expect(find.byKey(const ValueKey('timeline-scrub-preview')), findsOneWidget);
+    expect(repository.selectedIds, isEmpty);
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(repository.selectedIds, ['recording-1']);
+    expect(viewModel.sharedTimestamp, DateTime(2026, 10, 18, 12, 24).toUtc());
+  });
+
   testWidgets('previews a mouse scrub and seeks only when released', (
     tester,
   ) async {
