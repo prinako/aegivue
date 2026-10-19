@@ -30,7 +30,8 @@ export function compatibleMedia(
 ): { compatible: boolean; reason?: string } {
   const relevant = (media: MediaSignature) =>
     media.streams.filter(
-      (stream) => stream.codec_type === "video" || stream.codec_type === "audio",
+      (stream) =>
+        stream.codec_type === "video" || stream.codec_type === "audio",
     );
   const a = relevant(previous);
   const b = relevant(next);
