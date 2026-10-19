@@ -126,6 +126,19 @@ class AegivueRecordingPlayer extends HTMLElement {
     this.video?.pause();
   }
 
+  setMuted(muted) {
+    if (this.video) this.video.muted = Boolean(muted);
+  }
+
+  async toggleFullscreen() {
+    if (!this.video) return;
+    if (document.fullscreenElement) {
+      await document.exitFullscreen?.();
+      return;
+    }
+    await this.video.requestFullscreen?.();
+  }
+
   seekTo(seconds) {
     if (!Number.isFinite(seconds)) return;
     const target = Math.max(0, seconds);

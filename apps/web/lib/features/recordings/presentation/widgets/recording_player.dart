@@ -8,23 +8,31 @@ class RecordingPlayerController {
   void Function()? _play;
   void Function()? _pause;
   void Function(double seconds)? _seek;
+  void Function(bool muted)? _setMuted;
+  void Function()? _toggleFullscreen;
   Object? _owner;
 
   void play() => _play?.call();
   void pause() => _pause?.call();
   void seek(Duration position) =>
       _seek?.call(position.inMicroseconds / Duration.microsecondsPerSecond);
+  void setMuted(bool muted) => _setMuted?.call(muted);
+  void toggleFullscreen() => _toggleFullscreen?.call();
 
   void _attach({
     required Object owner,
     required void Function() play,
     required void Function() pause,
     required void Function(double seconds) seek,
+    required void Function(bool muted) setMuted,
+    required void Function() toggleFullscreen,
   }) {
     _owner = owner;
     _play = play;
     _pause = pause;
     _seek = seek;
+    _setMuted = setMuted;
+    _toggleFullscreen = toggleFullscreen;
   }
 
   void _detach(Object owner) {
@@ -33,6 +41,8 @@ class RecordingPlayerController {
     _play = null;
     _pause = null;
     _seek = null;
+    _setMuted = null;
+    _toggleFullscreen = null;
   }
 }
 
@@ -44,6 +54,7 @@ class RecordingPlayer extends StatefulWidget {
     this.controller,
     this.initialPosition = Duration.zero,
     this.onPlaybackEvent,
+    this.autoplay = false,
   });
 
   final String playbackUrl;
@@ -51,6 +62,7 @@ class RecordingPlayer extends StatefulWidget {
   final RecordingPlayerController? controller;
   final Duration initialPosition;
   final ValueChanged<RecordingPlaybackEvent>? onPlaybackEvent;
+  final bool autoplay;
 
   @override
   State<RecordingPlayer> createState() => _RecordingPlayerState();
@@ -106,6 +118,7 @@ class _RecordingPlayerState extends State<RecordingPlayer> {
         if (widget.initialPosition > Duration.zero) {
           widget.controller?.seek(widget.initialPosition);
         }
+        if (widget.autoplay) widget.controller?.play();
       },
     );
   }
@@ -120,6 +133,8 @@ class _RecordingPlayerState extends State<RecordingPlayer> {
       play: () => player.playMedia(),
       pause: () => player.pauseMedia(),
       seek: (seconds) => player.seekTo(seconds),
+      setMuted: (muted) => player.setMuted(muted),
+      toggleFullscreen: () => player.toggleFullscreen(),
     );
   }
 
@@ -163,4 +178,6 @@ extension type _AegivueRecordingPlayerElement._(JSObject _)
   external void playMedia();
   external void pauseMedia();
   external void seekTo(double seconds);
+  external void setMuted(bool muted);
+  external void toggleFullscreen();
 }

@@ -60,8 +60,8 @@ void main() {
       ..result = Future.value([
         _interval(
           'recording-1',
-          start: DateTime(2026, 10, 18, 6),
-          end: DateTime(2026, 10, 18, 7),
+          start: DateTime(2026, 10, 18, 12, 15),
+          end: DateTime(2026, 10, 18, 12, 30),
         ),
       ]);
     final viewModel = _viewModel(repository);
@@ -79,7 +79,7 @@ void main() {
       find.byKey(const ValueKey('timeline-segment-recording-1')),
     );
     expect(segment.left - track.left, closeTo(track.width * 0.25, 1));
-    expect(segment.width, closeTo(track.width / 24, 1));
+    expect(segment.width, closeTo(track.width * 0.25, 1));
   });
 
   testWidgets('keeps overlapping intervals individually clickable', (
@@ -89,13 +89,13 @@ void main() {
       ..result = Future.value([
         _interval(
           'recording-1',
-          start: DateTime(2026, 10, 18, 6),
-          end: DateTime(2026, 10, 18, 7),
+          start: DateTime(2026, 10, 18, 12, 15),
+          end: DateTime(2026, 10, 18, 12, 45),
         ),
         _interval(
           'recording-2',
-          start: DateTime(2026, 10, 18, 6, 30),
-          end: DateTime(2026, 10, 18, 7, 30),
+          start: DateTime(2026, 10, 18, 12, 30),
+          end: DateTime(2026, 10, 18, 12, 55),
         ),
       ]);
     final viewModel = _viewModel(repository);
@@ -188,11 +188,11 @@ void main() {
 
     viewModel.setZoom(RecordingTimelineZoom.sixHours);
     await tester.pump();
-    expect(find.byKey(const ValueKey('timeline-tick-01:00')), findsOneWidget);
+    expect(find.byKey(const ValueKey('timeline-tick-13:00')), findsOneWidget);
 
     viewModel.setZoom(RecordingTimelineZoom.oneHour);
     await tester.pump();
-    expect(find.byKey(const ValueKey('timeline-tick-00:15')), findsOneWidget);
+    expect(find.byKey(const ValueKey('timeline-tick-12:15')), findsOneWidget);
   });
 
   testWidgets('shows the current-time indicator only for today', (
@@ -251,7 +251,8 @@ void main() {
     final track = tester.getSize(
       find.byKey(const ValueKey('timeline-track-front-door')),
     );
-    expect(track.width, greaterThan(2000));
+    expect(track.width, lessThan(800));
+    expect(find.byTooltip('Previous window'), findsOneWidget);
   });
 
   testWidgets('centers zoom on the selected recording timestamp', (
@@ -271,10 +272,12 @@ void main() {
     viewModel.setZoom(RecordingTimelineZoom.sixHours);
     await tester.pumpAndSettle();
 
-    final scroll = tester.widget<SingleChildScrollView>(
+    expect(viewModel.windowStart, DateTime(2026, 10, 18, 18));
+    expect(viewModel.windowEnd, DateTime(2026, 10, 19));
+    expect(
       find.byKey(const ValueKey('timeline-horizontal-scroll')),
+      findsNothing,
     );
-    expect(scroll.controller!.offset, greaterThan(1200));
   });
 
   testWidgets('selects a segment and shows one playback card', (tester) async {
@@ -317,7 +320,7 @@ void main() {
     await tester.tapAt(Offset(rect.left + rect.width * 0.6, rect.center.dy));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('12:03:00'), findsOneWidget);
+    expect(find.text('Shared time 12:03:00'), findsOneWidget);
   });
 
   testWidgets('positions the playback playhead consistently across zooms', (
@@ -350,7 +353,11 @@ void main() {
         )
         .left!;
 
-    expect(zoomedLeft, closeTo(dayLeft * 4, 0.01));
+    final trackWidth = tester
+        .getSize(find.byKey(const ValueKey('timeline-track-front-door')))
+        .width;
+    expect(dayLeft, closeTo(trackWidth * (12 * 60 + 3) / (24 * 60), 0.01));
+    expect(zoomedLeft, closeTo(trackWidth * 3 / (6 * 60), 0.01));
   });
 
   testWidgets('reports a clicked gap without selecting unrelated footage', (
@@ -367,7 +374,7 @@ void main() {
     await tester.tapAt(Offset(rect.left + 10, rect.center.dy));
     await tester.pump();
 
-    expect(find.textContaining('No footage is available at'), findsOneWidget);
+    expect(find.text('No footage'), findsNWidgets(2));
     expect(repository.selectedIds, isEmpty);
     expect(find.byType(RecordingPlayer), findsNothing);
   });
@@ -382,7 +389,7 @@ void main() {
     await viewModel.select(interval);
     await tester.pumpWidget(_timeline(viewModel));
 
-    expect(find.textContaining('Loading'), findsOneWidget);
+    expect(find.textContaining('Ready'), findsOneWidget);
     viewModel.handlePlaybackEvent(
       interval.recordingId,
       const RecordingPlaybackEvent(
@@ -418,10 +425,10 @@ void main() {
 
     detail.completeError(StateError('missing'));
     await tester.pumpAndSettle();
-    expect(find.text('Unable to open the selected recording.'), findsOneWidget);
+    expect(find.text('Bad state: missing'), findsOneWidget);
   });
 
-  testWidgets('navigates recordings chronologically on the selected camera', (
+  testWidgets('navigates fixed timeline windows without another request', (
     tester,
   ) async {
     final repository = _TimelineRepository()
@@ -440,28 +447,16 @@ void main() {
     final viewModel = _viewModel(repository);
     await viewModel.load();
     await viewModel.select(repository.resultIntervals.last);
+    viewModel.setZoom(RecordingTimelineZoom.oneHour);
     await tester.pumpWidget(_timeline(viewModel));
 
-    expect(find.byTooltip('Previous recording'), findsOneWidget);
-    final previous = tester.widget<IconButton>(
-      find.ancestor(
-        of: find.byTooltip('Previous recording'),
-        matching: find.byType(IconButton),
-      ),
-    );
-    expect(previous.onPressed, isNull);
+    expect(viewModel.windowStart, DateTime(2026, 10, 18, 12));
+    await tester.tap(find.byTooltip('Next window'));
+    await tester.pump();
 
-    await tester.tap(find.byTooltip('Next recording'));
-    await tester.pumpAndSettle();
-
-    expect(repository.selectedIds, ['recording-1', 'recording-2']);
-    final next = tester.widget<IconButton>(
-      find.ancestor(
-        of: find.byTooltip('Next recording'),
-        matching: find.byType(IconButton),
-      ),
-    );
-    expect(next.onPressed, isNull);
+    expect(viewModel.windowStart, DateTime(2026, 10, 18, 13));
+    expect(repository.requests, hasLength(1));
+    expect(viewModel.selectedRecording?.id, 'recording-1');
   });
 
   testWidgets('shows loading, empty, and error states', (tester) async {
@@ -496,7 +491,10 @@ void main() {
 
     await tester.pumpWidget(_timeline(viewModel));
 
-    expect(find.byType(SingleChildScrollView), findsWidgets);
+    expect(
+      find.byKey(const ValueKey('timeline-horizontal-scroll')),
+      findsNothing,
+    );
     expect(find.text('Today').hitTestable(), findsOneWidget);
     expect(find.byType(RecordingPlayer), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -516,6 +514,81 @@ void main() {
     expect(find.text('Grid').hitTestable(), findsOneWidget);
     expect(find.text('Timeline').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('uses a fixed-width timeline without horizontal scrolling', (
+    tester,
+  ) async {
+    final viewModel = _viewModel(_TimelineRepository());
+    await viewModel.load();
+    viewModel.setZoom(RecordingTimelineZoom.oneHour);
+
+    await tester.pumpWidget(_timeline(viewModel));
+
+    expect(
+      find.byKey(const ValueKey('timeline-horizontal-scroll')),
+      findsNothing,
+    );
+    final track = tester.getRect(
+      find.byKey(const ValueKey('timeline-track-front-door')),
+    );
+    expect(track.right, lessThanOrEqualTo(800));
+    expect(find.byTooltip('Previous window'), findsOneWidget);
+    expect(find.byTooltip('Next window'), findsOneWidget);
+  });
+
+  testWidgets('opens synchronized players for two cameras at one timestamp', (
+    tester,
+  ) async {
+    final repository = _TimelineRepository()
+      ..result = Future.value([
+        _interval(
+          'front-recording',
+          cameraId: 'front-door',
+          start: DateTime(2026, 10, 18, 12),
+          end: DateTime(2026, 10, 18, 12, 5),
+        ),
+        _interval(
+          'garage-recording',
+          cameraId: 'garage',
+          start: DateTime(2026, 10, 18, 11, 58),
+          end: DateTime(2026, 10, 18, 12, 5),
+        ),
+      ])
+      ..findOverride = (id) => Future.value(
+        _recordingFor(id, id.startsWith('front') ? 'front-door' : 'garage'),
+      );
+    final viewModel = _viewModel(repository);
+    await viewModel.load(cameraIds: {'front-door', 'garage'});
+    await tester.pumpWidget(_timeline(viewModel));
+
+    await tester.tap(
+      find.byKey(const ValueKey('timeline-coverage-front-door')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RecordingPlayer), findsNWidgets(2));
+    expect(find.text('Front Door'), findsWidgets);
+    expect(find.text('Garage'), findsWidgets);
+    expect(find.byTooltip('Play all cameras'), findsOneWidget);
+  });
+
+  testWidgets('toggles the visible shared play pause control', (tester) async {
+    final repository = _TimelineRepository()
+      ..result = Future.value([_interval('recording-1')]);
+    final viewModel = _viewModel(repository);
+    await viewModel.load(cameraIds: {'front-door'});
+    await viewModel.seekTo(DateTime(2026, 10, 18, 12, 2));
+    await tester.pumpWidget(_timeline(viewModel));
+
+    await tester.tap(find.byTooltip('Play all cameras'));
+    await tester.pump();
+    expect(find.byTooltip('Pause all cameras'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Pause all cameras'));
+    await tester.pump();
+    expect(find.byTooltip('Play all cameras'), findsOneWidget);
+    viewModel.dispose();
   });
 }
 
@@ -635,13 +708,26 @@ class _TimelineRepository extends RecordingRepository {
 
 RecordingTimelineInterval _interval(
   String id, {
+  String cameraId = 'front-door',
   DateTime? start,
   DateTime? end,
 }) => RecordingTimelineInterval(
   recordingId: id,
-  cameraId: 'front-door',
+  cameraId: cameraId,
   startTime: start ?? DateTime(2026, 10, 18, 12),
   endTime: end ?? DateTime(2026, 10, 18, 12, 5),
+);
+
+Recording _recordingFor(String id, String cameraId) => Recording(
+  id: id,
+  cameraId: cameraId,
+  startTime: cameraId == 'garage'
+      ? DateTime(2026, 10, 18, 11, 58)
+      : DateTime(2026, 10, 18, 12),
+  endTime: DateTime(2026, 10, 18, 12, 5),
+  durationMs: cameraId == 'garage' ? 420000 : 300000,
+  container: 'mp4',
+  playbackUrl: '/$id.mp4',
 );
 
 const _cameras = [
