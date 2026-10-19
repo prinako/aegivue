@@ -12,17 +12,26 @@ and the resolution and file size when available. Select a card to open the
 player and see available codec, resolution, frame-rate, retention, and
 protection details.
 
+The date filter, camera filter, **Grid / Timeline** control, and refresh action
+are in the main Recordings header. On narrow screens the actions use a compact,
+horizontally scrollable row instead of adding another page heading.
+
 Use the **Grid / Timeline** control without leaving the Recordings route:
 
 - **Grid** keeps the newest-first, virtualized card library and server-side
   pagination.
 - **Timeline** shows one row for each selected or available camera. Colored
-  intervals represent finalized footage; empty track areas have no indexed
-  recording. Hover an interval for its local start, end, and duration, then
-  select it to load the existing recording player.
+  tracks represent finalized footage; empty track areas have no indexed
+  recording.
 
-Overlapping recordings use separate compact lanes so each interval remains
-selectable. Disabled and offline cameras remain visible, and a selected camera
+The 24-hour and 6-hour views merge overlapping and exactly adjacent intervals
+for visualization only. Genuine gaps remain visible and the original recording
+files and timestamps are unchanged. Selecting coverage resolves the clicked
+local timestamp to an original recording; if multiple files overlap there, a
+chooser preserves access to each one. The 1-hour view shows individual files,
+using separate compact lanes only for genuine overlaps.
+
+Disabled and offline cameras remain visible, and a selected camera
 that is no longer registered is labeled unavailable when historical intervals
 or the active filter still reference it. The timeline never assumes that a
 registered camera has footage.
@@ -32,8 +41,11 @@ registered camera has footage.
 With no date filter, Timeline opens on the current local calendar day. Previous
 day, **Today**, and next day change only the timeline viewport. The 24-hour,
 6-hour, and 1-hour presets change horizontal scale; zoomed tracks scroll
-horizontally. A local day runs from one local midnight to the next, so a
-daylight-saving transition can contain 23 or 25 elapsed hours.
+horizontally. Zoom keeps the visible time centered where practical, preferring
+the selected recording, then the current time for today, and midday for a
+historical day. Time ticks become more detailed with zoom, and today's timeline
+includes a current-time marker. A local day runs from one local midnight to the
+next, so a daylight-saving transition can contain 23 or 25 elapsed hours.
 
 The Grid's date and camera filters are shared with Timeline. Camera selections
 choose its rows and constrain its interval request. Date bounds are intersected
@@ -43,13 +55,13 @@ The browser converts the resulting interval bounds to UTC for the API.
 
 Selecting an interval loads only that recording into the existing player; the
 timeline does not create a video element per segment. Continuous playback
-across recording files and click-position seeking are not implemented in this
-version.
+across recording files and seeking the player to the exact position clicked on
+a coverage track are not implemented in this version.
 
 ## Searching recordings
 
-Use **All cameras** above the grid to select one or more cameras by name.
-Disabled and offline cameras remain available because their historical
+Use **All cameras** in the Recordings header to select one or more cameras by
+name. Disabled and offline cameras remain available because their historical
 recordings are still searchable. An empty selection, **Select all**, and
 **Clear** all mean that no camera restriction is applied. A selected camera
 that is no longer in the current camera list remains identified in the filter
@@ -115,8 +127,8 @@ but metadata for previously fetched pages remains in the view model and can
 accumulate during a long browsing session. Lazy rendering does not guarantee a
 fixed memory bound.
 
-The date filter and library heading remain outside the scrolling grid so the
-filter stays available while browsing.
+The filters remain in the application header while the grid scrolls, so they
+stay available without consuming library content space.
 
 ## Recordings API
 
