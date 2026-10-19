@@ -11,6 +11,7 @@ const recording = {
 describe("wall-clock MSE timestamp mapping", () => {
   it("maps a fragment's measured presentation time onto the UTC timeline", () => {
     const plan = planRecordingAppend(origin, recording, {
+      startSeconds: 0,
       firstPresentationSeconds: 1.25,
       durationSeconds: 10,
     });
@@ -20,8 +21,33 @@ describe("wall-clock MSE timestamp mapping", () => {
     expect(plan.gapBeforeSeconds).toBe(10);
   });
 
+  it("places a mid-recording fragment at its true timeline offset", () => {
+    const longRecording = {
+      ...recording,
+      endTime: "2026-10-19T10:02:00.000Z",
+    };
+    const plan = planRecordingAppend(origin, longRecording, {
+      startSeconds: 30,
+      firstPresentationSeconds: 0.75,
+      durationSeconds: 10,
+    }, 40);
+    expect(plan.timestampOffset).toBeCloseTo(39.25);
+    expect(plan.appendWindowStart).toBe(40);
+    expect(plan.appendWindowEnd).toBe(50);
+    expect(plan.gapBeforeSeconds).toBe(0);
+  });
+
+  it("rejects requested fragments beyond the end of the recording", () => {
+    expect(() => planRecordingAppend(origin, recording, {
+      startSeconds: 20,
+      firstPresentationSeconds: 0,
+      durationSeconds: 5,
+    })).toThrow(RangeError);
+  });
+
   it("preserves gaps between recordings", () => {
     const plan = planRecordingAppend(origin, recording, {
+      startSeconds: 0,
       firstPresentationSeconds: 0,
       durationSeconds: 10,
     }, 7);
@@ -31,6 +57,7 @@ describe("wall-clock MSE timestamp mapping", () => {
 
   it("clips overlap with earlier appended media", () => {
     const plan = planRecordingAppend(origin, recording, {
+      startSeconds: 0,
       firstPresentationSeconds: 0,
       durationSeconds: 10,
     }, 12);
@@ -40,6 +67,7 @@ describe("wall-clock MSE timestamp mapping", () => {
 
   it("rejects a fragment that is already entirely covered", () => {
     expect(() => planRecordingAppend(origin, recording, {
+      startSeconds: 0,
       firstPresentationSeconds: 0,
       durationSeconds: 10,
     }, 20)).toThrow(RangeError);
@@ -47,6 +75,7 @@ describe("wall-clock MSE timestamp mapping", () => {
 
   it("rejects unparseable and reversed recording times", () => {
     expect(() => planRecordingAppend(origin, { ...recording, endTime: recording.startTime }, {
+      startSeconds: 0,
       firstPresentationSeconds: 0, durationSeconds: 10,
     })).toThrow(RangeError);
   });
@@ -59,6 +88,7 @@ describe("wall-clock MSE timestamp mapping", () => {
       appendWindowEnd: Infinity,
     } as SourceBuffer;
     const plan = planRecordingAppend(origin, recording, {
+      startSeconds: 0,
       firstPresentationSeconds: 0.5,
       durationSeconds: 10,
     });
@@ -71,6 +101,7 @@ describe("wall-clock MSE timestamp mapping", () => {
   it("refuses to mutate an updating SourceBuffer", () => {
     const buffer = { updating: true } as SourceBuffer;
     const plan = planRecordingAppend(origin, recording, {
+      startSeconds: 0,
       firstPresentationSeconds: 0, durationSeconds: 10,
     });
     expect(() => applyAppendPlan(buffer, plan)).toThrow("SourceBuffer is updating");
