@@ -351,7 +351,10 @@ void main() {
       Offset(track.left + track.width * 0.4, track.center.dy),
     );
     await tester.pump();
-    expect(find.byKey(const ValueKey('timeline-scrub-preview')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('timeline-scrub-preview')),
+      findsOneWidget,
+    );
     expect(repository.selectedIds, isEmpty);
 
     await gesture.up();

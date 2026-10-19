@@ -667,12 +667,8 @@ class _TimelineTableState extends State<_TimelineTable> {
               child: GestureDetector(
                 key: const ValueKey('timeline-scrub-surface'),
                 behavior: HitTestBehavior.translucent,
-                onHorizontalDragStart: (details) => _beginScrub(
-                  details,
-                  windowStart,
-                  windowEnd,
-                  timelineWidth,
-                ),
+                onHorizontalDragStart: (details) =>
+                    _beginScrub(details, windowStart, windowEnd, timelineWidth),
                 onHorizontalDragUpdate: (details) => _updateScrub(
                   details,
                   windowStart,
