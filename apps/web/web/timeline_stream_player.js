@@ -23,11 +23,18 @@ class AegivueTimelineStream {
       this.activeAppend = null;
       this.flush();
     };
+    this.onUpdateError = () => {
+      this.activeAppend?.reject(new Error('SourceBuffer append failed'));
+      this.activeAppend = null;
+      // Drop the pending continuation: decoding is not reliable after failure.
+      for (const item of this.queue.splice(0)) item.reject?.(new Error('SourceBuffer failed'));
+    };
     this.onSourceOpen = () => {
       if (this.closed) return;
       this.sourceBuffer = this.mediaSource.addSourceBuffer(this.mimeType);
       this.sourceBuffer.mode = 'segments';
       this.sourceBuffer.addEventListener('updateend', this.onUpdateEnd);
+      this.sourceBuffer.addEventListener('error', this.onUpdateError);
       this.flush();
     };
     this.mediaSource.addEventListener('sourceopen', this.onSourceOpen, { once: true });
@@ -36,13 +43,13 @@ class AegivueTimelineStream {
   // appendFragment is serialized; callers must supply a valid fMP4 init
   // segment before any media fragments and ensure monotonically increasing
   // decode timestamps within a continuity period.
-  appendFragment(data, { timestampOffset } = {}) {
+  appendFragment(data, { timestampOffset, appendWindowStart, appendWindowEnd } = {}) {
     if (this.closed) return Promise.reject(new Error('Timeline stream closed'));
     if (!(data instanceof ArrayBuffer)) {
       return Promise.reject(new TypeError('Expected an ArrayBuffer'));
     }
     return new Promise((resolve, reject) => {
-      this.queue.push({ type: 'append', data, timestampOffset, resolve, reject });
+      this.queue.push({ type: 'append', data, timestampOffset, appendWindowStart, appendWindowEnd, resolve, reject });
       this.flush();
     });
   }
@@ -67,6 +74,12 @@ class AegivueTimelineStream {
       if (item.type === 'append') {
         if (item.timestampOffset !== undefined) {
           this.sourceBuffer.timestampOffset = item.timestampOffset;
+        }
+        if (item.appendWindowStart !== undefined || item.appendWindowEnd !== undefined) {
+          this.sourceBuffer.appendWindowStart = 0;
+          this.sourceBuffer.appendWindowEnd = Infinity;
+          if (item.appendWindowEnd !== undefined) this.sourceBuffer.appendWindowEnd = item.appendWindowEnd;
+          if (item.appendWindowStart !== undefined) this.sourceBuffer.appendWindowStart = item.appendWindowStart;
         }
         this.activeAppend = item;
         this.sourceBuffer.appendBuffer(item.data);
@@ -96,6 +109,7 @@ class AegivueTimelineStream {
     }
     if (this.sourceBuffer) {
       this.sourceBuffer.removeEventListener('updateend', this.onUpdateEnd);
+      this.sourceBuffer.removeEventListener('error', this.onUpdateError);
       try { if (this.sourceBuffer.updating) this.sourceBuffer.abort(); } catch (_) {}
     }
     if (this.mediaSource.readyState === 'open') {

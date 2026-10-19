@@ -12,6 +12,7 @@ import { resolve, sep } from "node:path";
 import { cameraId } from "../cameras/schemas.js";
 import { RecordingRepository, type RecordingFilter } from "./repository.js";
 import { sendFragmentedRecording } from "./fragmented-media.js";
+import { sendMeasuredFragment } from "./measured-fragment.js";
 
 const cameraIds = z
   .string()
@@ -359,6 +360,27 @@ function registerRecordingFragmentRoute(
   });
 }
 
+function registerMeasuredFragmentRoute(
+  app: FastifyInstance,
+  repository: RecordingRepository,
+  storagePath: string,
+) {
+  app.get("/:id/fragment/measured", async (request, reply) => {
+    const id = recordingId.safeParse((request.params as { id: string }).id);
+    const query = fragmentQuery.safeParse(request.query);
+    if (!id.success || !query.success) {
+      return reply.code(400).send({ code: "VALIDATION_ERROR", message: "Invalid fragment request" });
+    }
+    const recording = await repository.findFile(id.data);
+    if (!recording || recording.container !== "mp4") {
+      return reply.code(404).send({ code: "NOT_FOUND", message: "MP4 recording not found" });
+    }
+    const file = await resolveRecordingFile(reply, storagePath, recording.filePath);
+    if (!file) return;
+    return sendMeasuredFragment(request, reply, file, query.data);
+  });
+}
+
 function registerRecordingMediaRoute(
   app: FastifyInstance,
   repository: RecordingRepository,
@@ -397,6 +419,7 @@ export const recordingRoutes: FastifyPluginAsync<{
   registerRecordingThumbnailRoute(app, repository, options.storagePath);
   registerRecordingMediaRoute(app, repository, options.storagePath);
   registerRecordingFragmentRoute(app, repository, options.storagePath);
+  registerMeasuredFragmentRoute(app, repository, options.storagePath);
 };
 
 export function parseByteRange(
