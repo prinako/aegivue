@@ -1,0 +1,28 @@
+name: Experimental Chromium MSE continuity
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/web/web/timeline_stream_player.js'
+      - 'apps/web/web/mse_continuity_harness.html'
+      - 'apps/web/test_js/mse_chromium_smoke.mjs'
+      - '.github/workflows/mse-browser-smoke.yml'
+jobs:
+  chromium-mse-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install Playwright test browser
+        run: |
+          mkdir -p .mse-smoke-runner
+          npm install --prefix .mse-smoke-runner --no-save playwright@1.56.1
+          npx --prefix .mse-smoke-runner playwright install --with-deps chromium
+      - name: Run two-fragment Chromium test
+        run: |
+          ln -s ../../.mse-smoke-runner/node_modules apps/web/test_js/node_modules
+          node apps/web/test_js/mse_chromium_smoke.mjs
