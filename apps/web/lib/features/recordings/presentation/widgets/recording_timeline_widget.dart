@@ -10,7 +10,6 @@ import 'package:aegivue/features/recordings/presentation/models/recording_playba
 import 'package:aegivue/features/recordings/presentation/view_models/recording_timeline_view_model.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/selected_recording_card.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_player.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 class RecordingTimelineWidget extends StatefulWidget {
@@ -573,66 +572,30 @@ class _TimelineTable extends StatefulWidget {
 class _TimelineTableState extends State<_TimelineTable> {
   static const double _labelWidth = 136;
   static const double _axisHeight = 38;
-  static const double _dragThreshold = 4;
-
-  int? _scrubPointer;
-  double? _scrubStartX;
   DateTime? _scrubPreview;
-  bool _scrubMoved = false;
 
-  void _startScrub(
-    PointerDownEvent event,
+  void _beginScrub(
+    DragStartDetails details,
     DateTime windowStart,
     DateTime windowEnd,
     double width,
   ) {
-    if (_scrubPointer != null ||
-        (event.kind == PointerDeviceKind.mouse &&
-            event.buttons != kPrimaryMouseButton)) {
-      return;
-    }
-    _scrubPointer = event.pointer;
-    _scrubStartX = event.localPosition.dx;
-    _scrubMoved = false;
-    _setScrubPreview(event.localPosition.dx, windowStart, windowEnd, width);
+    _setScrubPreview(details.localPosition.dx, windowStart, windowEnd, width);
   }
 
-  void _moveScrub(
-    PointerMoveEvent event,
+  void _updateScrub(
+    DragUpdateDetails details,
     DateTime windowStart,
     DateTime windowEnd,
     double width,
   ) {
-    if (event.pointer != _scrubPointer) return;
-    final startX = _scrubStartX;
-    if (startX == null ||
-        (event.localPosition.dx - startX).abs() < _dragThreshold) {
-      return;
-    }
-    _scrubMoved = true;
-    _setScrubPreview(event.localPosition.dx, windowStart, windowEnd, width);
+    _setScrubPreview(details.localPosition.dx, windowStart, windowEnd, width);
   }
 
-  void _finishScrub(
-    PointerUpEvent event,
-    DateTime windowStart,
-    DateTime windowEnd,
-    double width,
-  ) {
-    if (event.pointer != _scrubPointer) return;
-    final shouldSeek = _scrubMoved;
-    final timestamp = _timestampAt(
-      event.localPosition.dx,
-      windowStart,
-      windowEnd,
-      width,
-    );
+  void _finishScrub() {
+    final timestamp = _scrubPreview;
     _clearScrub();
-    if (shouldSeek) unawaited(widget.onScrub(timestamp));
-  }
-
-  void _cancelScrub(PointerCancelEvent event) {
-    if (event.pointer == _scrubPointer) _clearScrub();
+    if (timestamp != null) unawaited(widget.onScrub(timestamp));
   }
 
   void _setScrubPreview(
@@ -641,24 +604,18 @@ class _TimelineTableState extends State<_TimelineTable> {
     DateTime windowEnd,
     double width,
   ) {
-    final timestamp = _timestampAt(x, windowStart, windowEnd, width);
+    final timestamp = _atFraction(
+      windowStart,
+      windowEnd,
+      (x / width).clamp(0.0, 1.0),
+    );
     if (timestamp == _scrubPreview) return;
     setState(() => _scrubPreview = timestamp);
   }
 
   void _clearScrub() {
-    _scrubPointer = null;
-    _scrubStartX = null;
-    _scrubMoved = false;
     if (_scrubPreview != null) setState(() => _scrubPreview = null);
   }
-
-  DateTime _timestampAt(
-    double x,
-    DateTime windowStart,
-    DateTime windowEnd,
-    double width,
-  ) => _atFraction(windowStart, windowEnd, (x / width).clamp(0.0, 1.0));
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -707,16 +664,23 @@ class _TimelineTableState extends State<_TimelineTable> {
               ),
             ),
             Expanded(
-              child: Listener(
+              child: GestureDetector(
                 key: const ValueKey('timeline-scrub-surface'),
                 behavior: HitTestBehavior.translucent,
-                onPointerDown: (event) =>
-                    _startScrub(event, windowStart, windowEnd, timelineWidth),
-                onPointerMove: (event) =>
-                    _moveScrub(event, windowStart, windowEnd, timelineWidth),
-                onPointerUp: (event) =>
-                    _finishScrub(event, windowStart, windowEnd, timelineWidth),
-                onPointerCancel: _cancelScrub,
+                onHorizontalDragStart: (details) => _beginScrub(
+                  details,
+                  windowStart,
+                  windowEnd,
+                  timelineWidth,
+                ),
+                onHorizontalDragUpdate: (details) => _updateScrub(
+                  details,
+                  windowStart,
+                  windowEnd,
+                  timelineWidth,
+                ),
+                onHorizontalDragEnd: (_) => _finishScrub(),
+                onHorizontalDragCancel: _clearScrub,
                 child: SizedBox(
                   width: timelineWidth,
                   child: Stack(
