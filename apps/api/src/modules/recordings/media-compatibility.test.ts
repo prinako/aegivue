@@ -48,7 +48,7 @@ describe("MSE recording codec compatibility", () => {
 
   it("rejects missing decoder configuration", () => {
     expect(
-      compatibleMedia(signature([video]), signature([{ ...video, extradata_hash: undefined }]))
+      compatibleMedia(signature([video]), signature([{ ...video, extradata_hash: "" }]))
         .compatible,
     ).toBe(false);
   });
