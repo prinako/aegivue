@@ -79,6 +79,19 @@ export function readFragmentTimings(data: Buffer): TrackTiming[] {
     scales.set(id, scale);
   }
   if (!scales.size) throw new Error("No media tracks");
+  // A trun can omit sample durations, relying on tfhd or mvex/trex defaults.
+  const trexDefaults = new Map<number, number>();
+  const mvex = child(data, moov, "mvex");
+  if (mvex) {
+    for (const trex of boxes(data, mvex.payload, mvex.end).filter((b) => b.type === "trex")) {
+      const header = full(data, trex);
+      if (header.version !== 0) throw new Error("Unsupported trex version");
+      const trackId = u32(data, header.offset, trex.end);
+      const duration = u32(data, header.offset + 8, trex.end);
+      if (!scales.has(trackId) || trexDefaults.has(trackId)) throw new Error("Invalid trex track");
+      trexDefaults.set(trackId, duration);
+    }
+  }
   const results = new Map<number, TrackTiming>();
   for (const moof of top.filter((box) => box.type === "moof")) {
     for (const traf of boxes(data, moof.payload, moof.end).filter((b) => b.type === "traf")) {
@@ -97,6 +110,9 @@ export function readFragmentTimings(data: Buffer): TrackTiming[] {
       let decode = d.version === 1 ? u64(data, d.offset, tfdt.end) : BigInt(u32(data, d.offset, tfdt.end));
       if (d.version !== 0 && d.version !== 1) throw new Error("Unsupported tfdt version");
       const initialDecode = decode;
+      if (h.flags & 0x000010) pos += 4;
+      if (h.flags & 0x000020) pos += 4;
+      if (pos > tfhd.end) throw new Error("Truncated tfhd");
       let firstPts: number | undefined;
       let endPts: number | undefined;
       let count = 0;
@@ -109,7 +125,7 @@ export function readFragmentTimings(data: Buffer): TrackTiming[] {
         if (r.flags & 0x000001) p += 4;
         if (r.flags & 0x000004) p += 4;
         for (let i = 0; i < samples; i++) {
-          const duration = r.flags & 0x000100 ? u32(data, p, trun.end) : defaultDuration;
+          const duration = r.flags & 0x000100 ? u32(data, p, trun.end) : (defaultDuration ?? trexDefaults.get(trackId));
           if (r.flags & 0x000100) p += 4;
           if (duration === undefined || duration === 0) throw new Error("Missing sample duration");
           if (r.flags & 0x000200) p += 4;
