@@ -13,6 +13,7 @@ import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:aegivue/features/recordings/domain/recording_timeline_interval.dart';
 import 'package:aegivue/features/recordings/presentation/view_models/recording_timeline_view_model.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_library.dart';
+import 'package:aegivue/features/recordings/presentation/widgets/recording_header_actions.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_player.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_timeline_widget.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/selected_recording_card.dart';
@@ -52,6 +53,7 @@ void main() {
       ]);
     final viewModel = _viewModel(repository);
     await viewModel.load();
+    viewModel.setZoom(RecordingTimelineZoom.oneHour);
 
     await tester.pumpWidget(_timeline(viewModel));
 
@@ -85,6 +87,7 @@ void main() {
       ]);
     final viewModel = _viewModel(repository);
     await viewModel.load();
+    viewModel.setZoom(RecordingTimelineZoom.oneHour);
 
     await tester.pumpWidget(_timeline(viewModel));
 
@@ -102,6 +105,95 @@ void main() {
       ),
       findsNWidgets(2),
     );
+  });
+
+  testWidgets('merges overlapping and adjacent intervals in coverage mode', (
+    tester,
+  ) async {
+    final repository = _TimelineRepository()
+      ..result = Future.value([
+        _interval(
+          'recording-1',
+          start: DateTime(2026, 10, 18, 6),
+          end: DateTime(2026, 10, 18, 7),
+        ),
+        _interval(
+          'recording-2',
+          start: DateTime(2026, 10, 18, 6, 30),
+          end: DateTime(2026, 10, 18, 7, 30),
+        ),
+        _interval(
+          'recording-3',
+          start: DateTime(2026, 10, 18, 7, 30),
+          end: DateTime(2026, 10, 18, 8),
+        ),
+        _interval(
+          'recording-4',
+          start: DateTime(2026, 10, 18, 8, 1),
+          end: DateTime(2026, 10, 18, 9),
+        ),
+      ]);
+    final viewModel = _viewModel(repository);
+    await viewModel.load();
+
+    await tester.pumpWidget(_timeline(viewModel));
+
+    expect(
+      find.byKey(const ValueKey('timeline-coverage-front-door')),
+      findsNWidgets(2),
+    );
+    expect(
+      find.byKey(const ValueKey('timeline-segment-recording-1')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('selects the original file from a coverage interval', (
+    tester,
+  ) async {
+    final repository = _TimelineRepository()
+      ..result = Future.value([_interval('recording-1')]);
+    final viewModel = _viewModel(repository);
+    await viewModel.load();
+    await tester.pumpWidget(_timeline(viewModel));
+
+    await tester.tap(
+      find.byKey(const ValueKey('timeline-coverage-front-door')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.selectedIds, ['recording-1']);
+    expect(find.byType(SelectedRecordingCard), findsOneWidget);
+  });
+
+  testWidgets('uses zoom-specific dynamic time ticks', (tester) async {
+    final viewModel = _viewModel(_TimelineRepository());
+    await viewModel.load();
+    await tester.pumpWidget(_timeline(viewModel));
+
+    expect(find.byKey(const ValueKey('timeline-tick-04:00')), findsOneWidget);
+
+    viewModel.setZoom(RecordingTimelineZoom.sixHours);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('timeline-tick-01:00')), findsOneWidget);
+
+    viewModel.setZoom(RecordingTimelineZoom.oneHour);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('timeline-tick-00:15')), findsOneWidget);
+  });
+
+  testWidgets('shows the current-time indicator only for today', (
+    tester,
+  ) async {
+    final viewModel = _viewModel(_TimelineRepository());
+    await viewModel.load();
+    await tester.pumpWidget(_timeline(viewModel));
+
+    expect(find.byKey(const ValueKey('timeline-current-time')), findsOneWidget);
+
+    await viewModel.previousDay();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('timeline-current-time')), findsNothing);
   });
 
   testWidgets('shows only cameras selected by the shared filter', (
@@ -149,11 +241,35 @@ void main() {
     expect(track.width, greaterThan(2000));
   });
 
+  testWidgets('centers zoom on the selected recording timestamp', (
+    tester,
+  ) async {
+    final interval = _interval(
+      'recording-1',
+      start: DateTime(2026, 10, 18, 18),
+      end: DateTime(2026, 10, 18, 18, 5),
+    );
+    final repository = _TimelineRepository()..result = Future.value([interval]);
+    final viewModel = _viewModel(repository);
+    await viewModel.load();
+    await viewModel.select(interval);
+    await tester.pumpWidget(_timeline(viewModel));
+
+    viewModel.setZoom(RecordingTimelineZoom.sixHours);
+    await tester.pumpAndSettle();
+
+    final scroll = tester.widget<SingleChildScrollView>(
+      find.byKey(const ValueKey('timeline-horizontal-scroll')),
+    );
+    expect(scroll.controller!.offset, greaterThan(1200));
+  });
+
   testWidgets('selects a segment and shows one playback card', (tester) async {
     final repository = _TimelineRepository()
       ..result = Future.value([_interval('recording-1')]);
     final viewModel = _viewModel(repository);
     await viewModel.load();
+    viewModel.setZoom(RecordingTimelineZoom.oneHour);
 
     await tester.pumpWidget(_timeline(viewModel));
     await tester.tap(
@@ -225,19 +341,7 @@ RecordingTimelineViewModel _viewModel(_TimelineRepository repository) =>
     );
 
 Widget _library(RecordingTimelineViewModel viewModel) => MaterialApp(
-  home: Scaffold(
-    body: RecordingLibrary(
-      recordings: const [],
-      onRefresh: () async {},
-      onLoadMore: () async {},
-      onSetExpiry: (_, _) async {},
-      hasMore: false,
-      loadingMore: false,
-      updatingExpiry: false,
-      cameras: _cameras,
-      timeline: viewModel,
-    ),
-  ),
+  home: Scaffold(body: _LibraryHarness(viewModel: viewModel)),
 );
 
 Widget _timeline(RecordingTimelineViewModel viewModel) => MaterialApp(
@@ -246,9 +350,63 @@ Widget _timeline(RecordingTimelineViewModel viewModel) => MaterialApp(
       viewModel: viewModel,
       cameras: _cameras,
       onSetExpiry: (_) async => true,
+      now: () => DateTime(2026, 10, 18, 12),
     ),
   ),
 );
+
+class _LibraryHarness extends StatefulWidget {
+  const _LibraryHarness({required this.viewModel});
+  final RecordingTimelineViewModel viewModel;
+
+  @override
+  State<_LibraryHarness> createState() => _LibraryHarnessState();
+}
+
+class _LibraryHarnessState extends State<_LibraryHarness> {
+  RecordingLibraryView view = RecordingLibraryView.grid;
+
+  Future<void> _select(RecordingLibraryView value) async {
+    setState(() => view = value);
+    if (value == RecordingLibraryView.timeline) {
+      await widget.viewModel.load();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      RecordingHeaderActions(
+        view: view,
+        onSelectView: _select,
+        filterFrom: null,
+        filterTo: null,
+        onApplyDateFilter: ({from, to}) async {},
+        onClearDateFilter: () async {},
+        cameras: _cameras,
+        camerasLoading: false,
+        cameraError: null,
+        selectedCameraIds: const {},
+        onApplyCameraFilter: (_) async {},
+        onClearCameraFilter: () async {},
+      ),
+      Expanded(
+        child: RecordingLibrary(
+          view: view,
+          recordings: const [],
+          onRefresh: () async {},
+          onLoadMore: () async {},
+          onSetExpiry: (_, _) async {},
+          hasMore: false,
+          loadingMore: false,
+          updatingExpiry: false,
+          cameras: _cameras,
+          timeline: widget.viewModel,
+        ),
+      ),
+    ],
+  );
+}
 
 class _TimelineRepository extends RecordingRepository {
   _TimelineRepository() : super(ApiClient());

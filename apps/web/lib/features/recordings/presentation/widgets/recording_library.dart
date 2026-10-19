@@ -1,8 +1,6 @@
 import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
-import 'package:aegivue/features/recordings/presentation/widgets/recording_camera_filter_control.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_details_dialog.dart';
-import 'package:aegivue/features/recordings/presentation/widgets/recording_date_filter_control.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_expiry_sheet.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_list_widget.dart';
 import 'package:aegivue/features/recordings/presentation/view_models/recording_timeline_view_model.dart';
@@ -19,16 +17,13 @@ class RecordingLibrary extends StatefulWidget {
     required this.hasMore,
     required this.loadingMore,
     required this.updatingExpiry,
+    this.view = RecordingLibraryView.grid,
     this.filterFrom,
     this.filterTo,
-    this.onApplyDateFilter = _ignoreDateFilter,
-    this.onClearDateFilter = _ignoreClearDateFilter,
     this.cameras = const [],
     this.camerasLoading = false,
     this.cameraError,
     this.selectedCameraIds = const {},
-    this.onApplyCameraFilter = _ignoreCameraFilter,
-    this.onClearCameraFilter = _ignoreClearCameraFilter,
     this.timeline,
   });
 
@@ -40,16 +35,13 @@ class RecordingLibrary extends StatefulWidget {
   final bool hasMore;
   final bool loadingMore;
   final bool updatingExpiry;
+  final RecordingLibraryView view;
   final DateTime? filterFrom;
   final DateTime? filterTo;
-  final ApplyRecordingDateFilter onApplyDateFilter;
-  final Future<void> Function() onClearDateFilter;
   final List<Camera> cameras;
   final bool camerasLoading;
   final Object? cameraError;
   final Set<String> selectedCameraIds;
-  final ApplyRecordingCameraFilter onApplyCameraFilter;
-  final Future<void> Function() onClearCameraFilter;
   final RecordingTimelineViewModel? timeline;
 
   bool get hasDateFilter => filterFrom != null || filterTo != null;
@@ -61,8 +53,6 @@ class RecordingLibrary extends StatefulWidget {
 
 class _RecordingLibraryState extends State<RecordingLibrary> {
   final ScrollController _scrollController = ScrollController();
-  RecordingLibraryView _view = RecordingLibraryView.grid;
-
   @override
   void initState() {
     super.initState();
@@ -159,58 +149,6 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
     );
   }
 
-  Future<void> _selectView(RecordingLibraryView view) async {
-    if (_view == view) return;
-    setState(() => _view = view);
-    if (view == RecordingLibraryView.timeline) {
-      await widget.timeline?.load(
-        filterFrom: widget.filterFrom,
-        filterTo: widget.filterTo,
-        cameraIds: widget.selectedCameraIds,
-      );
-    }
-  }
-
-  Future<void> _applyDateFilter({DateTime? from, DateTime? to}) async {
-    await widget.onApplyDateFilter(from: from, to: to);
-    if (_view == RecordingLibraryView.timeline) {
-      await widget.timeline?.syncFilters(
-        filterFrom: from,
-        filterTo: to,
-        cameraIds: widget.selectedCameraIds,
-        focusDateFilter: true,
-      );
-    }
-  }
-
-  Future<void> _clearDateFilter() async {
-    await widget.onClearDateFilter();
-    if (_view == RecordingLibraryView.timeline) {
-      await widget.timeline?.syncFilters(cameraIds: widget.selectedCameraIds);
-    }
-  }
-
-  Future<void> _applyCameraFilter(Set<String> cameraIds) async {
-    await widget.onApplyCameraFilter(cameraIds);
-    if (_view == RecordingLibraryView.timeline) {
-      await widget.timeline?.syncFilters(
-        filterFrom: widget.filterFrom,
-        filterTo: widget.filterTo,
-        cameraIds: cameraIds,
-      );
-    }
-  }
-
-  Future<void> _clearCameraFilter() async {
-    await widget.onClearCameraFilter();
-    if (_view == RecordingLibraryView.timeline) {
-      await widget.timeline?.syncFilters(
-        filterFrom: widget.filterFrom,
-        filterTo: widget.filterTo,
-      );
-    }
-  }
-
   void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
@@ -222,88 +160,7 @@ class _RecordingLibraryState extends State<RecordingLibrary> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final heading = Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Recording library',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  const Text(
-                    'Browse, preview, download, and control how long finalized footage is retained.',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                ],
-              );
-              final filters = Wrap(
-                alignment: constraints.maxWidth >= 1000
-                    ? WrapAlignment.end
-                    : WrapAlignment.start,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  RecordingDateFilterControl(
-                    from: widget.filterFrom,
-                    to: widget.filterTo,
-                    onApply: _applyDateFilter,
-                    onClear: _clearDateFilter,
-                  ),
-                  RecordingCameraFilterControl(
-                    cameras: widget.cameras,
-                    selectedCameraIds: widget.selectedCameraIds,
-                    loading: widget.camerasLoading,
-                    error: widget.cameraError,
-                    onApply: _applyCameraFilter,
-                    onClear: _clearCameraFilter,
-                  ),
-                  if (widget.timeline != null)
-                    SegmentedButton<RecordingLibraryView>(
-                      showSelectedIcon: false,
-                      segments: const [
-                        ButtonSegment(
-                          value: RecordingLibraryView.grid,
-                          icon: Icon(Icons.grid_view_rounded),
-                          label: Text('Grid'),
-                        ),
-                        ButtonSegment(
-                          value: RecordingLibraryView.timeline,
-                          icon: Icon(Icons.timeline_rounded),
-                          label: Text('Timeline'),
-                        ),
-                      ],
-                      selected: {_view},
-                      onSelectionChanged: (selection) =>
-                          _selectView(selection.single),
-                    ),
-                ],
-              );
-
-              if (constraints.maxWidth < 1000) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [heading, const SizedBox(height: 12), filters],
-                );
-              }
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: heading),
-                  const SizedBox(width: 16),
-                  Expanded(child: filters),
-                ],
-              );
-            },
-          ),
-        ),
-        if (_view == RecordingLibraryView.grid)
+        if (widget.view == RecordingLibraryView.grid)
           Expanded(
             child: RefreshIndicator(
               onRefresh: widget.onRefresh,
@@ -399,11 +256,3 @@ String _formatExpiry(DateTime value) {
   final month = local.month.toString().padLeft(2, '0');
   return '$day/$month/${local.year}';
 }
-
-Future<void> _ignoreDateFilter({DateTime? from, DateTime? to}) async {}
-
-Future<void> _ignoreClearDateFilter() async {}
-
-Future<void> _ignoreCameraFilter(Set<String> cameraIds) async {}
-
-Future<void> _ignoreClearCameraFilter() async {}
