@@ -4,8 +4,10 @@ import 'dart:math' as math;
 import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:aegivue/features/recordings/domain/recording_timeline_interval.dart';
+import 'package:aegivue/features/recordings/presentation/models/recording_playback.dart';
 import 'package:aegivue/features/recordings/presentation/view_models/recording_timeline_view_model.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/selected_recording_card.dart';
+import 'package:aegivue/features/recordings/presentation/widgets/recording_player.dart';
 import 'package:flutter/material.dart';
 
 class RecordingTimelineWidget extends StatefulWidget {
@@ -33,6 +35,8 @@ class RecordingTimelineWidget extends StatefulWidget {
 
 class _RecordingTimelineWidgetState extends State<RecordingTimelineWidget> {
   Timer? _clockTimer;
+  final RecordingPlayerController _playerController =
+      RecordingPlayerController();
 
   @override
   void initState() {
@@ -108,7 +112,8 @@ class _RecordingTimelineWidgetState extends State<RecordingTimelineWidget> {
                     viewModel: viewModel,
                     rows: rows,
                     now: widget.now,
-                    onSelect: viewModel.select,
+                    onSelect: viewModel.selectAt,
+                    onNoFootage: viewModel.markNoFootage,
                   ),
                 ],
                 if (viewModel.selectionLoading)
@@ -121,26 +126,50 @@ class _RecordingTimelineWidgetState extends State<RecordingTimelineWidget> {
                     icon: Icons.error_outline_rounded,
                     message: 'Unable to open the selected recording.',
                   ),
-                if (viewModel.selectedRecording case final recording?) ...[
-                  const Padding(
-                    padding: EdgeInsets.only(top: 18, bottom: 8),
-                    child: Text(
-                      'Selected recording',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                if (!viewModel.selectionLoading &&
+                    viewModel.selectionError == null &&
+                    viewModel.selectedRecording == null)
+                  _EmptyPlaybackWorkspace(
+                    timestamp: viewModel.noFootageTimestamp,
                   ),
-                  SelectedRecordingCard(
-                    key: ValueKey('selected-recording-${recording.id}'),
-                    recording: recording,
-                    cameraName: _cameraName(recording.cameraId, rows),
-                    onSetExpiry: recording.protected
-                        ? null
-                        : () => widget.onSetExpiry(recording),
-                    onClose: viewModel.clearSelection,
-                    updatingExpiry: false,
+                if (viewModel.selectedRecording case final recording?) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 18),
+                    child: ValueListenableBuilder<RecordingPlaybackSnapshot>(
+                      valueListenable: viewModel.playback,
+                      builder: (context, playback, _) {
+                        return SelectedRecordingCard(
+                          key: ValueKey('selected-recording-${recording.id}'),
+                          recording: recording,
+                          cameraName: _cameraName(recording.cameraId, rows),
+                          subtitle: _playbackSubtitle(
+                            viewModel.selectedInterval,
+                            viewModel.playbackTimestamp,
+                            playback,
+                          ),
+                          playerController: _playerController,
+                          initialPosition: viewModel.selectedOffset,
+                          onPlaybackEvent: (event) => viewModel
+                              .handlePlaybackEvent(recording.id, event),
+                          playbackControls: _PlaybackControls(
+                            playing: playback.playing,
+                            previousEnabled:
+                                viewModel.previousRecording != null,
+                            nextEnabled: viewModel.nextRecording != null,
+                            onPrevious: viewModel.selectPrevious,
+                            onPlayPause: playback.playing
+                                ? _playerController.pause
+                                : _playerController.play,
+                            onNext: viewModel.selectNext,
+                          ),
+                          onSetExpiry: recording.protected
+                              ? null
+                              : () => widget.onSetExpiry(recording),
+                          onClose: viewModel.clearSelection,
+                          updatingExpiry: false,
+                        );
+                      },
+                    ),
                   ),
                 ],
               ],
@@ -150,6 +179,77 @@ class _RecordingTimelineWidgetState extends State<RecordingTimelineWidget> {
       ],
     );
   }
+}
+
+class _EmptyPlaybackWorkspace extends StatelessWidget {
+  const _EmptyPlaybackWorkspace({this.timestamp});
+  final DateTime? timestamp;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    margin: const EdgeInsets.only(top: 18),
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.play_circle_outline_rounded, color: Colors.white38),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              timestamp == null
+                  ? 'Select footage to begin playback.'
+                  : 'No footage is available at ${_formatTimestamp(timestamp!)}.',
+              style: const TextStyle(color: Colors.white54),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _PlaybackControls extends StatelessWidget {
+  const _PlaybackControls({
+    required this.playing,
+    required this.previousEnabled,
+    required this.nextEnabled,
+    required this.onPrevious,
+    required this.onPlayPause,
+    required this.onNext,
+  });
+
+  final bool playing;
+  final bool previousEnabled;
+  final bool nextEnabled;
+  final VoidCallback onPrevious;
+  final VoidCallback onPlayPause;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      IconButton(
+        tooltip: 'Previous recording',
+        visualDensity: VisualDensity.compact,
+        onPressed: previousEnabled ? onPrevious : null,
+        icon: const Icon(Icons.skip_previous_rounded),
+      ),
+      IconButton(
+        tooltip: playing ? 'Pause recording' : 'Play recording',
+        visualDensity: VisualDensity.compact,
+        onPressed: onPlayPause,
+        icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+      ),
+      IconButton(
+        tooltip: 'Next recording',
+        visualDensity: VisualDensity.compact,
+        onPressed: nextEnabled ? onNext : null,
+        icon: const Icon(Icons.skip_next_rounded),
+      ),
+    ],
+  );
 }
 
 class _LoadingState extends StatelessWidget {
@@ -219,11 +319,13 @@ class _TimelineTable extends StatefulWidget {
     required this.rows,
     required this.now,
     required this.onSelect,
+    required this.onNoFootage,
   });
   final RecordingTimelineViewModel viewModel;
   final List<_CameraRow> rows;
   final DateTime Function() now;
-  final ValueChanged<RecordingTimelineInterval> onSelect;
+  final Future<void> Function(RecordingTimelineInterval, DateTime) onSelect;
+  final ValueChanged<DateTime> onNoFootage;
 
   @override
   State<_TimelineTable> createState() => _TimelineTableState();
@@ -323,6 +425,7 @@ class _TimelineTableState extends State<_TimelineTable> {
                               selectedId:
                                   widget.viewModel.selectedRecording?.id,
                               onSelect: widget.onSelect,
+                              onNoFootage: widget.onNoFootage,
                             ),
                         ],
                       ),
@@ -344,6 +447,30 @@ class _TimelineTableState extends State<_TimelineTable> {
                             ).colorScheme.tertiary.withValues(alpha: 0.75),
                           ),
                         ),
+                      ValueListenableBuilder<RecordingPlaybackSnapshot>(
+                        valueListenable: widget.viewModel.playback,
+                        builder: (context, _, _) {
+                          final timestamp = widget.viewModel.playbackTimestamp;
+                          if (timestamp == null) {
+                            return const SizedBox.shrink();
+                          }
+                          return Positioned(
+                            key: const ValueKey('timeline-playback-playhead'),
+                            left: _position(
+                              timestamp,
+                              widget.viewModel.dayStart,
+                              widget.viewModel.dayEnd,
+                              timelineWidth,
+                            ),
+                            top: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 2,
+                              color: Colors.amberAccent,
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -483,6 +610,7 @@ class _TimelineTrack extends StatelessWidget {
     required this.zoom,
     required this.selectedId,
     required this.onSelect,
+    required this.onNoFootage,
   });
   final _RowLayout layout;
   final double width;
@@ -490,7 +618,8 @@ class _TimelineTrack extends StatelessWidget {
   final DateTime end;
   final RecordingTimelineZoom zoom;
   final String? selectedId;
-  final ValueChanged<RecordingTimelineInterval> onSelect;
+  final Future<void> Function(RecordingTimelineInterval, DateTime) onSelect;
+  final ValueChanged<DateTime> onNoFootage;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -499,10 +628,17 @@ class _TimelineTrack extends StatelessWidget {
     child: Stack(
       children: [
         Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.025),
-              border: const Border(top: BorderSide(color: Colors.white10)),
+          child: Material(
+            color: Colors.white.withValues(alpha: 0.025),
+            child: InkWell(
+              key: ValueKey('timeline-gap-${layout.row.cameraId}'),
+              onTapUp: (details) => onNoFootage(
+                _atFraction(
+                  start,
+                  end,
+                  (details.localPosition.dx / width).clamp(0.0, 1.0),
+                ),
+              ),
             ),
           ),
         ),
@@ -576,7 +712,7 @@ class _TimelineTrack extends StatelessWidget {
         .toList();
     if (matches.isEmpty) matches = coverage.intervals;
     if (matches.length == 1) {
-      onSelect(matches.single);
+      await onSelect(matches.single, clicked);
       return;
     }
     final chosen = await showModalBottomSheet<RecordingTimelineInterval>(
@@ -598,7 +734,7 @@ class _TimelineTrack extends StatelessWidget {
         ),
       ),
     );
-    if (chosen != null) onSelect(chosen);
+    if (chosen != null) await onSelect(chosen, clicked);
   }
 
   Widget _detailSegment(BuildContext context, _PlacedInterval placed) {
@@ -626,7 +762,14 @@ class _TimelineTrack extends StatelessWidget {
           child: InkWell(
             key: ValueKey('timeline-segment-${interval.recordingId}'),
             borderRadius: BorderRadius.circular(5),
-            onTap: () => onSelect(interval),
+            onTapUp: (details) {
+              final clicked = _atFraction(
+                interval.startTime,
+                interval.endTime,
+                (details.localPosition.dx / geometry.width).clamp(0.0, 1.0),
+              );
+              onSelect(interval, clicked);
+            },
           ),
         ),
       ),
@@ -877,6 +1020,36 @@ String _formatTime(DateTime value) {
   return '${local.hour.toString().padLeft(2, '0')}:'
       '${local.minute.toString().padLeft(2, '0')}';
 }
+
+String _formatTimestamp(DateTime value) {
+  final local = value.toLocal();
+  return '${local.hour.toString().padLeft(2, '0')}:'
+      '${local.minute.toString().padLeft(2, '0')}:'
+      '${local.second.toString().padLeft(2, '0')}';
+}
+
+String _playbackSubtitle(
+  RecordingTimelineInterval? interval,
+  DateTime? playbackTimestamp,
+  RecordingPlaybackSnapshot playback,
+) {
+  if (interval == null) return '';
+  final current = playbackTimestamp ?? interval.startTime;
+  return '${_formatTimestamp(interval.startTime)}–'
+      '${_formatTimestamp(interval.endTime)} • ${_formatTimestamp(current)}'
+      ' • ${_playbackStatus(playback)}';
+}
+
+String _playbackStatus(RecordingPlaybackSnapshot playback) =>
+    switch (playback.phase) {
+      RecordingPlaybackPhase.idle => 'Ready',
+      RecordingPlaybackPhase.loading => 'Loading',
+      RecordingPlaybackPhase.ready => 'Ready',
+      RecordingPlaybackPhase.playing => 'Playing',
+      RecordingPlaybackPhase.paused => 'Paused',
+      RecordingPlaybackPhase.ended => 'Ended',
+      RecordingPlaybackPhase.error => playback.error ?? 'Playback error',
+    };
 
 DateTime _atFraction(DateTime start, DateTime end, double fraction) =>
     start.add(

@@ -1,5 +1,6 @@
 import 'package:aegivue/core/utils/formatters.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
+import 'package:aegivue/features/recordings/presentation/models/recording_playback.dart';
 import 'package:aegivue/features/recordings/presentation/recording_download.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_player.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,11 @@ class SelectedRecordingCard extends StatelessWidget {
     this.onSetExpiry,
     required this.onClose,
     required this.updatingExpiry,
+    this.playerController,
+    this.initialPosition = Duration.zero,
+    this.onPlaybackEvent,
+    this.playbackControls,
+    this.subtitle,
   });
 
   final Recording recording;
@@ -19,6 +25,11 @@ class SelectedRecordingCard extends StatelessWidget {
   final VoidCallback? onSetExpiry;
   final VoidCallback onClose;
   final bool updatingExpiry;
+  final RecordingPlayerController? playerController;
+  final Duration initialPosition;
+  final ValueChanged<RecordingPlaybackEvent>? onPlaybackEvent;
+  final Widget? playbackControls;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -33,10 +44,17 @@ class SelectedRecordingCard extends StatelessWidget {
             onSetExpiry: onSetExpiry,
             onClose: onClose,
             updatingExpiry: updatingExpiry,
+            playbackControls: playbackControls,
+            subtitle: subtitle,
           ),
           AspectRatio(
             aspectRatio: 16 / 9,
-            child: RecordingPlayer(playbackUrl: recording.playbackUrl),
+            child: RecordingPlayer(
+              playbackUrl: recording.playbackUrl,
+              controller: playerController,
+              initialPosition: initialPosition,
+              onPlaybackEvent: onPlaybackEvent,
+            ),
           ),
           _RecordingDetails(recording: recording),
         ],
@@ -52,6 +70,8 @@ class _SelectedRecordingHeader extends StatelessWidget {
     required this.onSetExpiry,
     required this.onClose,
     required this.updatingExpiry,
+    required this.playbackControls,
+    required this.subtitle,
   });
 
   final Recording recording;
@@ -59,49 +79,90 @@ class _SelectedRecordingHeader extends StatelessWidget {
   final VoidCallback? onSetExpiry;
   final VoidCallback onClose;
   final bool updatingExpiry;
+  final Widget? playbackControls;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-      child: Row(
-        children: [
-          const Icon(Icons.play_circle_fill_rounded, size: 20),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (playbackControls != null && constraints.maxWidth < 620) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  cameraName ?? recording.cameraId,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                Row(
+                  children: [
+                    const Icon(Icons.play_circle_fill_rounded, size: 20),
+                    const SizedBox(width: 9),
+                    Expanded(child: _title()),
+                    _closeButton(),
+                  ],
                 ),
-                Text(
-                  Formatters.recordingTimestamp(recording.startTime),
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    playbackControls!,
+                    _expiryButton(),
+                    _downloadButton(),
+                  ],
                 ),
               ],
-            ),
-          ),
-          _ExpiryButton(
-            recording: recording,
-            onSetExpiry: onSetExpiry,
-            updating: updatingExpiry,
-          ),
-          IconButton(
-            tooltip: 'Download recording',
-            onPressed: () => RecordingDownload.start(recording),
-            icon: const Icon(Icons.download_rounded),
-          ),
-          IconButton(
-            tooltip: 'Close player',
-            onPressed: onClose,
-            icon: const Icon(Icons.close_rounded),
-          ),
-        ],
+            );
+          }
+          return Row(
+            children: [
+              const Icon(Icons.play_circle_fill_rounded, size: 20),
+              const SizedBox(width: 9),
+              Expanded(child: _title()),
+              ?playbackControls,
+              _expiryButton(),
+              _downloadButton(),
+              _closeButton(),
+            ],
+          );
+        },
       ),
     );
   }
+
+  Widget _title() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        cameraName ?? recording.cameraId,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+      Text(
+        subtitle ?? Formatters.recordingTimestamp(recording.startTime),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: Colors.white54, fontSize: 11),
+      ),
+    ],
+  );
+
+  Widget _expiryButton() => _ExpiryButton(
+    recording: recording,
+    onSetExpiry: onSetExpiry,
+    updating: updatingExpiry,
+  );
+
+  Widget _downloadButton() => IconButton(
+    tooltip: 'Download recording',
+    onPressed: () => RecordingDownload.start(recording),
+    icon: const Icon(Icons.download_rounded),
+  );
+
+  Widget _closeButton() => IconButton(
+    tooltip: 'Close player',
+    onPressed: onClose,
+    icon: const Icon(Icons.close_rounded),
+  );
 }
 
 class _ExpiryButton extends StatelessWidget {

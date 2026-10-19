@@ -1,6 +1,7 @@
 import 'package:aegivue/features/recordings/data/recording_repository.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:aegivue/features/recordings/domain/recording_timeline_interval.dart';
+import 'package:aegivue/features/recordings/presentation/models/recording_playback.dart';
 import 'package:flutter/foundation.dart';
 
 enum RecordingTimelineZoom {
@@ -32,11 +33,16 @@ class RecordingTimelineViewModel extends ChangeNotifier {
   Set<String> _cameraIds = const {};
   RecordingTimelineZoom _zoom = RecordingTimelineZoom.day;
   Recording? _selectedRecording;
+  RecordingTimelineInterval? _selectedInterval;
+  DateTime? _selectedTimestamp;
   bool _selectionLoading = false;
   Object? _selectionError;
   int _requestGeneration = 0;
   int _selectionGeneration = 0;
   bool _disposed = false;
+  final ValueNotifier<RecordingPlaybackSnapshot> playback = ValueNotifier(
+    const RecordingPlaybackSnapshot(),
+  );
 
   List<RecordingTimelineInterval> get items => _items;
   bool get loading => _loading;
@@ -48,6 +54,33 @@ class RecordingTimelineViewModel extends ChangeNotifier {
   Set<String> get cameraIds => _cameraIds;
   RecordingTimelineZoom get zoom => _zoom;
   Recording? get selectedRecording => _selectedRecording;
+  RecordingTimelineInterval? get selectedInterval => _selectedInterval;
+  DateTime? get selectedTimestamp => _selectedTimestamp;
+  DateTime? get noFootageTimestamp =>
+      _selectedRecording == null && !_selectionLoading
+      ? _selectedTimestamp
+      : null;
+  Duration get selectedOffset {
+    final interval = _selectedInterval;
+    final timestamp = _selectedTimestamp;
+    if (interval == null || timestamp == null) return Duration.zero;
+    final offset = timestamp.difference(interval.startTime);
+    if (offset.isNegative) return Duration.zero;
+    if (offset > interval.duration) return interval.duration;
+    return offset;
+  }
+
+  DateTime? get playbackTimestamp {
+    final interval = _selectedInterval;
+    if (interval == null) return null;
+    final position = playback.value.position > interval.duration
+        ? interval.duration
+        : playback.value.position;
+    return interval.startTime.add(position);
+  }
+
+  RecordingTimelineInterval? get previousRecording => _adjacentRecording(-1);
+  RecordingTimelineInterval? get nextRecording => _adjacentRecording(1);
   bool get selectionLoading => _selectionLoading;
   Object? get selectionError => _selectionError;
 
@@ -110,10 +143,23 @@ class RecordingTimelineViewModel extends ChangeNotifier {
     _notifyListeners();
   }
 
-  Future<void> select(RecordingTimelineInterval interval) async {
+  Future<void> select(RecordingTimelineInterval interval) =>
+      selectAt(interval, interval.startTime);
+
+  Future<void> selectAt(
+    RecordingTimelineInterval interval,
+    DateTime timestamp,
+  ) async {
     final generation = ++_selectionGeneration;
+    _selectedInterval = interval;
+    _selectedTimestamp = _clampTimestamp(timestamp, interval);
+    _selectedRecording = null;
     _selectionLoading = true;
     _selectionError = null;
+    playback.value = RecordingPlaybackSnapshot(
+      phase: RecordingPlaybackPhase.loading,
+      position: selectedOffset,
+    );
     _notifyListeners();
     try {
       final recording = await _repository.find(interval.recordingId);
@@ -122,6 +168,10 @@ class RecordingTimelineViewModel extends ChangeNotifier {
     } catch (error) {
       if (_disposed || generation != _selectionGeneration) return;
       _selectionError = error;
+      playback.value = RecordingPlaybackSnapshot(
+        phase: RecordingPlaybackPhase.error,
+        error: error.toString(),
+      );
     } finally {
       if (generation == _selectionGeneration) {
         _selectionLoading = false;
@@ -133,9 +183,68 @@ class RecordingTimelineViewModel extends ChangeNotifier {
   void clearSelection() {
     _selectionGeneration++;
     _selectedRecording = null;
+    _selectedInterval = null;
+    _selectedTimestamp = null;
     _selectionLoading = false;
     _selectionError = null;
+    playback.value = const RecordingPlaybackSnapshot();
     _notifyListeners();
+  }
+
+  Future<void> selectPrevious() async {
+    final interval = previousRecording;
+    if (interval != null) await select(interval);
+  }
+
+  Future<void> selectNext() async {
+    final interval = nextRecording;
+    if (interval != null) await select(interval);
+  }
+
+  void markNoFootage(DateTime timestamp) {
+    _selectionGeneration++;
+    _selectedRecording = null;
+    _selectedInterval = null;
+    _selectedTimestamp = timestamp;
+    _selectionLoading = false;
+    _selectionError = null;
+    playback.value = const RecordingPlaybackSnapshot();
+    _notifyListeners();
+  }
+
+  void handlePlaybackEvent(String recordingId, RecordingPlaybackEvent event) {
+    if (_selectedRecording?.id != recordingId) return;
+    final interval = _selectedInterval;
+    var position = event.position;
+    if (position.isNegative) position = Duration.zero;
+    final maximum = event.duration ?? interval?.duration;
+    if (maximum != null && position > maximum) position = maximum;
+    playback.value = RecordingPlaybackSnapshot(
+      phase: event.phase,
+      position: position,
+      duration: event.duration,
+      error: event.error,
+    );
+  }
+
+  RecordingTimelineInterval? _adjacentRecording(int direction) {
+    final selected = _selectedInterval;
+    if (selected == null) return null;
+    final recordings =
+        _items.where((item) => item.cameraId == selected.cameraId).toList()
+          ..sort((a, b) {
+            final byStart = a.startTime.compareTo(b.startTime);
+            if (byStart != 0) return byStart;
+            final byEnd = a.endTime.compareTo(b.endTime);
+            if (byEnd != 0) return byEnd;
+            return a.recordingId.compareTo(b.recordingId);
+          });
+    final index = recordings.indexWhere(
+      (item) => item.recordingId == selected.recordingId,
+    );
+    final target = index + direction;
+    if (index < 0 || target < 0 || target >= recordings.length) return null;
+    return recordings[target];
   }
 
   Future<void> _reload() async {
@@ -161,6 +270,11 @@ class RecordingTimelineViewModel extends ChangeNotifier {
       if (_disposed || generation != _requestGeneration) return;
       _items = List.unmodifiable(items);
       _loaded = true;
+      final selectedId = _selectedInterval?.recordingId;
+      if (selectedId != null &&
+          !_items.any((item) => item.recordingId == selectedId)) {
+        clearSelection();
+      }
     } catch (error) {
       if (_disposed || generation != _requestGeneration) return;
       _error = error;
@@ -181,8 +295,18 @@ class RecordingTimelineViewModel extends ChangeNotifier {
     _disposed = true;
     _requestGeneration++;
     _selectionGeneration++;
+    playback.dispose();
     super.dispose();
   }
+}
+
+DateTime _clampTimestamp(
+  DateTime timestamp,
+  RecordingTimelineInterval interval,
+) {
+  if (timestamp.isBefore(interval.startTime)) return interval.startTime;
+  if (timestamp.isAfter(interval.endTime)) return interval.endTime;
+  return timestamp;
 }
 
 DateTime _startOfDay(DateTime value) =>
