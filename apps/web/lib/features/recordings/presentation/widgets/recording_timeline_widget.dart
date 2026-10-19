@@ -122,6 +122,15 @@ class _RecordingTimelineWidgetState extends State<RecordingTimelineWidget> {
     _playerControllers[correction.cameraId]?.seek(correction.position);
   }
 
+  void _toggleMuted(String cameraId) {
+    setState(() {
+      if (!_mutedCameraIds.add(cameraId)) {
+        _mutedCameraIds.remove(cameraId);
+      }
+    });
+    _controller(cameraId).setMuted(_mutedCameraIds.contains(cameraId));
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.viewModel,
@@ -156,50 +165,20 @@ class _RecordingTimelineWidgetState extends State<RecordingTimelineWidget> {
                     actionLabel: 'Retry',
                     onAction: viewModel.refresh,
                   ),
-                if (widget.camerasLoading && widget.cameras.isEmpty)
-                  const _LoadingState()
-                else if (widget.cameraError != null && widget.cameras.isEmpty)
-                  const _MessageCard(
-                    icon: Icons.videocam_off_outlined,
-                    message: 'Camera data is unavailable.',
-                  )
-                else if (viewModel.loading && !viewModel.loaded)
-                  const _LoadingState()
-                else if (rows.isEmpty)
-                  const _MessageCard(
-                    icon: Icons.videocam_off_outlined,
-                    message: 'No cameras available.',
-                  )
-                else ...[
-                  if (viewModel.items.isEmpty && viewModel.error == null)
-                    const _MessageCard(
-                      icon: Icons.timeline_rounded,
-                      message: 'No recordings in this time window.',
-                    ),
-                  _TimelineTable(
-                    viewModel: viewModel,
-                    rows: rows,
-                    now: widget.now,
-                    onSelect: viewModel.selectAt,
-                    onScrub: viewModel.seekTo,
-                    onNoFootage: viewModel.markNoFootage,
-                  ),
-                ],
+                _TimelineContent(
+                  viewModel: viewModel,
+                  rows: rows,
+                  camerasLoading: widget.camerasLoading,
+                  camerasEmpty: widget.cameras.isEmpty,
+                  cameraError: widget.cameraError,
+                  now: widget.now,
+                ),
                 _PlaybackWorkspace(
                   viewModel: viewModel,
                   rows: rows,
                   controllerFor: _controller,
                   mutedCameraIds: _mutedCameraIds,
-                  onToggleMuted: (cameraId) {
-                    setState(() {
-                      if (!_mutedCameraIds.add(cameraId)) {
-                        _mutedCameraIds.remove(cameraId);
-                      }
-                    });
-                    _controller(
-                      cameraId,
-                    ).setMuted(_mutedCameraIds.contains(cameraId));
-                  },
+                  onToggleMuted: _toggleMuted,
                   onSetExpiry: widget.onSetExpiry,
                 ),
               ],
@@ -219,6 +198,60 @@ class _LoadingState extends StatelessWidget {
     height: 240,
     child: Center(child: CircularProgressIndicator()),
   );
+}
+
+class _TimelineContent extends StatelessWidget {
+  const _TimelineContent({
+    required this.viewModel,
+    required this.rows,
+    required this.camerasLoading,
+    required this.camerasEmpty,
+    required this.cameraError,
+    required this.now,
+  });
+
+  final RecordingTimelineViewModel viewModel;
+  final List<_CameraRow> rows;
+  final bool camerasLoading;
+  final bool camerasEmpty;
+  final Object? cameraError;
+  final DateTime Function() now;
+
+  @override
+  Widget build(BuildContext context) {
+    if (camerasLoading && camerasEmpty) return const _LoadingState();
+    if (cameraError != null && camerasEmpty) {
+      return const _MessageCard(
+        icon: Icons.videocam_off_outlined,
+        message: 'Camera data is unavailable.',
+      );
+    }
+    if (viewModel.loading && !viewModel.loaded) return const _LoadingState();
+    if (rows.isEmpty) {
+      return const _MessageCard(
+        icon: Icons.videocam_off_outlined,
+        message: 'No cameras available.',
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (viewModel.items.isEmpty && viewModel.error == null)
+          const _MessageCard(
+            icon: Icons.timeline_rounded,
+            message: 'No recordings in this time window.',
+          ),
+        _TimelineTable(
+          viewModel: viewModel,
+          rows: rows,
+          now: now,
+          onSelect: viewModel.selectAt,
+          onScrub: viewModel.seekTo,
+          onNoFootage: viewModel.markNoFootage,
+        ),
+      ],
+    );
+  }
 }
 
 class _TimelineControls extends StatelessWidget {
