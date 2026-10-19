@@ -27,40 +27,55 @@ const signature = (streams: MediaSignature["streams"]): MediaSignature => ({
 
 describe("MSE recording codec compatibility", () => {
   it("accepts identical video and audio decoder configurations", () => {
-    expect(compatibleMedia(signature([video, audio]), signature([{ ...video }, { ...audio }]))).toEqual({
+    expect(
+      compatibleMedia(
+        signature([video, audio]),
+        signature([{ ...video }, { ...audio }]),
+      ),
+    ).toEqual({
       compatible: true,
     });
   });
 
   it("rejects different H.264 profiles", () => {
     expect(
-      compatibleMedia(signature([video]), signature([{ ...video, profile: "Baseline" }]))
-        .compatible,
+      compatibleMedia(
+        signature([video]),
+        signature([{ ...video, profile: "Baseline" }]),
+      ).compatible,
     ).toBe(false);
   });
 
   it("rejects changed SPS/PPS even when the named codec is identical", () => {
     expect(
-      compatibleMedia(signature([video]), signature([{ ...video, extradata_hash: "SHA256:different" }]))
-        .compatible,
+      compatibleMedia(
+        signature([video]),
+        signature([{ ...video, extradata_hash: "SHA256:different" }]),
+      ).compatible,
     ).toBe(false);
   });
 
   it("rejects missing decoder configuration", () => {
     expect(
-      compatibleMedia(signature([video]), signature([{ ...video, extradata_hash: "" }]))
-        .compatible,
+      compatibleMedia(
+        signature([video]),
+        signature([{ ...video, extradata_hash: "" }]),
+      ).compatible,
     ).toBe(false);
   });
 
   it("rejects video-only to video-plus-audio transitions", () => {
-    expect(compatibleMedia(signature([video]), signature([video, audio])).compatible).toBe(false);
+    expect(
+      compatibleMedia(signature([video]), signature([video, audio])).compatible,
+    ).toBe(false);
   });
 
   it("rejects resolution changes", () => {
     expect(
-      compatibleMedia(signature([video]), signature([{ ...video, width: 1280 }]))
-        .compatible,
+      compatibleMedia(
+        signature([video]),
+        signature([{ ...video, width: 1280 }]),
+      ).compatible,
     ).toBe(false);
   });
 });
