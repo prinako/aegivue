@@ -15,10 +15,14 @@ class AegivueTimelineStream {
     this.sourceBuffer = null;
     this.queue = [];
     this.closed = false;
-    this.processing = false;
+    this.activeAppend = null;
     this.objectUrl = URL.createObjectURL(this.mediaSource);
     this.video.src = this.objectUrl;
-    this.onUpdateEnd = () => this.flush();
+    this.onUpdateEnd = () => {
+      this.activeAppend?.resolve();
+      this.activeAppend = null;
+      this.flush();
+    };
     this.onSourceOpen = () => {
       if (this.closed) return;
       this.sourceBuffer = this.mediaSource.addSourceBuffer(this.mimeType);
@@ -64,8 +68,8 @@ class AegivueTimelineStream {
         if (item.timestampOffset !== undefined) {
           this.sourceBuffer.timestampOffset = item.timestampOffset;
         }
+        this.activeAppend = item;
         this.sourceBuffer.appendBuffer(item.data);
-        item.resolve();
       } else {
         const ranges = this.sourceBuffer.buffered;
         if (ranges.length && ranges.start(0) < item.cutoff) {
@@ -75,6 +79,7 @@ class AegivueTimelineStream {
         }
       }
     } catch (error) {
+      if (item === this.activeAppend) this.activeAppend = null;
       if (item.reject) item.reject(error);
       // The following item might still be valid, but an invalid media
       // fragment must be surfaced to the coordinator as a fatal error.
@@ -84,6 +89,8 @@ class AegivueTimelineStream {
   dispose() {
     if (this.closed) return;
     this.closed = true;
+    this.activeAppend?.reject(new Error('Timeline stream closed'));
+    this.activeAppend = null;
     for (const item of this.queue.splice(0)) {
       item.reject?.(new Error('Timeline stream closed'));
     }
