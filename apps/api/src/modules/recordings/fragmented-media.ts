@@ -27,7 +27,7 @@ export async function sendFragmentedRecording(
   try {
     const metadata = await stat(file);
     if (!metadata.isFile() || metadata.size === 0 || !file.endsWith(".mp4")) {
-      return reply.code(404).send({
+      return await reply.code(404).send({
         code: "FILE_NOT_FOUND",
         message: "Finalized MP4 recording is unavailable",
       });
