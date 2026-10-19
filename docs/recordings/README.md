@@ -76,6 +76,18 @@ ID, while clicking overlapping coverage still offers the original alternatives.
 Clicking within an individual or merged coverage segment seeks every active
 camera to the represented timestamp. If media metadata is still loading, the
 player queues the seek and applies it when the playable duration is known.
+On mouse or touch devices, hold and drag anywhere across the timeline to
+preview a timestamp. The preview is clamped to the visible 24-hour, 6-hour, or
+1-hour window, and the shared seek is committed once when the pointer is
+released; dragging does not issue intermediate recording requests.
+
+While the shared clock is playing, reaching the end of a finalized MP4 moves
+immediately into contiguous indexed footage and keeps all cameras on the same
+timestamp. A user pause is never treated as an end-of-file transition, and a
+genuine gap stops playback when no selected camera has footage. Replaced video
+elements release their media source and event listeners before the next file is
+mounted.
+
 Browser seeking can land on the nearest decodable frame rather than the exact
 requested millisecond, depending on the recording's keyframes and codec. The
 coordinator corrects player drift greater than 750 milliseconds. Accuracy is

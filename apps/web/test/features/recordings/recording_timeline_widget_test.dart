@@ -18,6 +18,7 @@ import 'package:aegivue/features/recordings/presentation/widgets/recording_heade
 import 'package:aegivue/features/recordings/presentation/widgets/recording_player.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_timeline_widget.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/selected_recording_card.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -323,6 +324,98 @@ void main() {
     expect(find.text('Shared time 12:03:00'), findsOneWidget);
   });
 
+  testWidgets('previews a mouse scrub and seeks only when released', (
+    tester,
+  ) async {
+    final repository = _TimelineRepository()
+      ..result = Future.value([
+        _interval(
+          'recording-1',
+          start: DateTime(2026, 10, 18, 12),
+          end: DateTime(2026, 10, 18, 13),
+        ),
+      ]);
+    final viewModel = _viewModel(repository);
+    await viewModel.load(cameraIds: {'front-door'});
+    viewModel.setZoom(RecordingTimelineZoom.oneHour);
+    await tester.pumpWidget(_timeline(viewModel));
+    final track = tester.getRect(
+      find.byKey(const ValueKey('timeline-track-front-door')),
+    );
+
+    final gesture = await tester.startGesture(
+      Offset(track.left + track.width * 0.1, track.center.dy),
+      kind: PointerDeviceKind.mouse,
+    );
+    await gesture.moveTo(
+      Offset(track.left + track.width * 0.5, track.center.dy),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('timeline-scrub-preview')),
+      findsOneWidget,
+    );
+    expect(find.text('12:30:00'), findsOneWidget);
+    expect(repository.selectedIds, isEmpty);
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('timeline-scrub-preview')), findsNothing);
+    expect(viewModel.sharedTimestamp, DateTime(2026, 10, 18, 12, 30).toUtc());
+    expect(repository.selectedIds, ['recording-1']);
+  });
+
+  testWidgets('clamps touch scrubbing and seeks every selected camera once', (
+    tester,
+  ) async {
+    final repository = _TimelineRepository()
+      ..result = Future.value([
+        _interval(
+          'front-recording',
+          cameraId: 'front-door',
+          start: DateTime(2026, 10, 18, 12),
+          end: DateTime(2026, 10, 18, 13),
+        ),
+        _interval(
+          'garage-recording',
+          cameraId: 'garage',
+          start: DateTime(2026, 10, 18, 12),
+          end: DateTime(2026, 10, 18, 13),
+        ),
+      ])
+      ..findOverride = (id) => Future.value(
+        _recordingFor(id, id.startsWith('front') ? 'front-door' : 'garage'),
+      );
+    final viewModel = _viewModel(repository);
+    await viewModel.load(cameraIds: {'front-door', 'garage'});
+    viewModel.setZoom(RecordingTimelineZoom.oneHour);
+    await tester.pumpWidget(_timeline(viewModel));
+    final track = tester.getRect(
+      find.byKey(const ValueKey('timeline-track-front-door')),
+    );
+
+    final gesture = await tester.startGesture(
+      Offset(track.center.dx, track.center.dy),
+      kind: PointerDeviceKind.touch,
+    );
+    await gesture.moveTo(Offset(track.left - 80, track.center.dy));
+    await tester.pump();
+
+    expect(find.text('12:00:00'), findsOneWidget);
+    expect(repository.selectedIds, isEmpty);
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(viewModel.sharedTimestamp, DateTime(2026, 10, 18, 12).toUtc());
+    expect(
+      repository.selectedIds,
+      unorderedEquals(['front-recording', 'garage-recording']),
+    );
+  });
+
   testWidgets('positions the playback playhead consistently across zooms', (
     tester,
   ) async {
@@ -571,6 +664,50 @@ void main() {
     expect(find.text('Front Door'), findsWidgets);
     expect(find.text('Garage'), findsWidgets);
     expect(find.byTooltip('Play all cameras'), findsOneWidget);
+  });
+
+  testWidgets('replaces an ended player with the contiguous segment', (
+    tester,
+  ) async {
+    final repository = _TimelineRepository()
+      ..result = Future.value([
+        _interval(
+          'front-first',
+          start: DateTime(2026, 10, 18, 12),
+          end: DateTime(2026, 10, 18, 12, 5),
+        ),
+        _interval(
+          'front-second',
+          start: DateTime(2026, 10, 18, 12, 5),
+          end: DateTime(2026, 10, 18, 12, 10),
+        ),
+      ]);
+    final viewModel = _viewModel(repository);
+    await viewModel.load(cameraIds: {'front-door'});
+    await viewModel.seekTo(DateTime(2026, 10, 18, 12, 4));
+    await tester.pumpWidget(_timeline(viewModel));
+    viewModel.play();
+    await tester.pump();
+
+    viewModel.handleCameraPlaybackEvent(
+      'front-door',
+      'front-first',
+      const RecordingPlaybackEvent(
+        phase: RecordingPlaybackPhase.ended,
+        position: Duration(minutes: 5),
+        duration: Duration(minutes: 5),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('player-/front-first.mp4')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('player-/front-second.mp4')),
+      findsOneWidget,
+    );
+    expect(find.byType(RecordingPlayer), findsOneWidget);
+    expect(viewModel.playing, isTrue);
+    viewModel.dispose();
   });
 
   testWidgets('toggles the visible shared play pause control', (tester) async {

@@ -305,6 +305,17 @@ class RecordingTimelineViewModel extends ChangeNotifier {
     final interval = session.interval;
     final timestamp = _sharedTimestampUtc;
     if (interval == null || timestamp == null) return;
+    if (event.phase == RecordingPlaybackPhase.ended && !_playing) {
+      _updateLegacyPlayback();
+      return;
+    }
+    if (event.phase == RecordingPlaybackPhase.ended) {
+      final boundary = interval.endTime.toUtc();
+      _clockAnchorUtc = boundary;
+      _clockStartedUtc = _now().toUtc();
+      unawaited(synchronize(boundary));
+      return;
+    }
     if (!_playing) {
       _sharedTimestampUtc = interval.startTime.add(event.position).toUtc();
       _updateSessionTimestamps();
