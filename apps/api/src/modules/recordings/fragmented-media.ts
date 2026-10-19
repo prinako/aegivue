@@ -97,6 +97,8 @@ export async function sendFragmentedRecording(
   ffmpeg.stdout.pipe(output);
   output.once("close", stop);
   reply
+    .header("X-Recording-Fragment-Start", String(query.startSeconds))
+    .header("X-Recording-Fragment-Duration", String(query.durationSeconds))
     .header("Content-Type", "video/mp4")
     .header("Cache-Control", "private, no-store")
     .header("X-Content-Type-Options", "nosniff");
