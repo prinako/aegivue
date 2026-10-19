@@ -67,3 +67,21 @@ describe("track-level trex sample-duration defaults", () => {
     expect(() => readFragmentTimings(sample(0))).toThrow("Missing sample duration");
   });
 });
+
+describe("tfhd optional fields", () => {
+  it("handles default sample duration followed by default sample size and flags", () => {
+    const tkhd = full("tkhd", 0, 0, n(0), n(0), n(1));
+    const mdhd = full("mdhd", 0, 0, n(0), n(0), n(1000));
+    const moov = box("moov", box("trak", tkhd, box("mdia", mdhd)));
+    const tfhd = full("tfhd", 0, 0x000038, n(1), n(500), n(4096), n(0));
+    const tfdt = full("tfdt", 0, 0, n(1000));
+    const trun = full("trun", 0, 0, n(2));
+    const input = Buffer.concat([moov, box("moof", box("traf", tfhd, tfdt, trun))]);
+    expect(readFragmentTimings(input)[0]).toMatchObject({
+      firstDecodeSeconds: 1,
+      firstPresentationSeconds: 1,
+      endPresentationSeconds: 2,
+      samples: 2,
+    });
+  });
+});
