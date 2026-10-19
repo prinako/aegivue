@@ -29,21 +29,41 @@ export async function sendMeasuredFragment(
   }
 
   if (active >= maxConcurrent) {
-    return reply.code(503).header("Retry-After", "1")
+    return reply
+      .code(503)
+      .header("Retry-After", "1")
       .send({ code: "REMUX_BUSY" });
   }
   active++;
   try {
     const bytes = await new Promise<Buffer>((resolve, reject) => {
-      const child = spawn("ffmpeg", [
-        "-hide_banner", "-loglevel", "error", "-nostdin",
-        "-ss", String(query.startSeconds),
-        "-i", file, "-t", String(query.durationSeconds),
-        "-map", "0:v:0", "-map", "0:a?",
-        "-c", "copy",
-        "-movflags", "frag_keyframe+empty_moov+default_base_moof",
-        "-f", "mp4", "pipe:1",
-      ], { stdio: ["ignore", "pipe", "pipe"] });
+      const child = spawn(
+        "ffmpeg",
+        [
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-nostdin",
+          "-ss",
+          String(query.startSeconds),
+          "-i",
+          file,
+          "-t",
+          String(query.durationSeconds),
+          "-map",
+          "0:v:0",
+          "-map",
+          "0:a?",
+          "-c",
+          "copy",
+          "-movflags",
+          "frag_keyframe+empty_moov+default_base_moof",
+          "-f",
+          "mp4",
+          "pipe:1",
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
       let settled = false;
       let size = 0;
       const chunks: Buffer[] = [];
@@ -59,7 +79,10 @@ export async function sendMeasuredFragment(
         } else resolve(Buffer.concat(chunks, size));
       };
       const abort = () => finish(new Error("CLIENT_ABORTED"));
-      const timeout = setTimeout(() => finish(new Error("REMUX_TIMEOUT")), 30000);
+      const timeout = setTimeout(
+        () => finish(new Error("REMUX_TIMEOUT")),
+        30000,
+      );
       request.raw.once("aborted", abort);
       reply.raw.once("close", abort);
       child.stdout.on("data", (chunk: Buffer) => {
@@ -73,7 +96,8 @@ export async function sendMeasuredFragment(
       child.stderr.resume();
       child.on("error", () => finish(new Error("REMUX_FAILED")));
       child.on("close", (code) => {
-        if (!settled) finish(code === 0 ? undefined : new Error("REMUX_FAILED"));
+        if (!settled)
+          finish(code === 0 ? undefined : new Error("REMUX_FAILED"));
       });
     });
     const timings = readFragmentTimings(bytes);
@@ -82,19 +106,31 @@ export async function sendMeasuredFragment(
       tracks: timings,
     });
     // Encode JSON in base64url to make a safe compact single HTTP header.
-    return reply.header("Content-Type", "video/mp4")
+    return reply
+      .header("Content-Type", "video/mp4")
       .header("Cache-Control", "private, no-store")
       .header("X-Content-Type-Options", "nosniff")
-      .header("X-Recording-Timing-Base64", Buffer.from(metadata).toString("base64url"))
+      .header(
+        "X-Recording-Timing-Base64",
+        Buffer.from(metadata).toString("base64url"),
+      )
       .send(bytes);
   } catch (error) {
     const message = error instanceof Error ? error.message : "REMUX_FAILED";
-    const code = message === "CLIENT_ABORTED" ? 499
-      : message === "FRAGMENT_TOO_LARGE" ? 413
-      : message === "REMUX_TIMEOUT" ? 504
-      : message.includes("MP4") || message.includes("fragment") ? 422 : 502;
+    const code =
+      message === "CLIENT_ABORTED"
+        ? 499
+        : message === "FRAGMENT_TOO_LARGE"
+          ? 413
+          : message === "REMUX_TIMEOUT"
+            ? 504
+            : message.includes("MP4") || message.includes("fragment")
+              ? 422
+              : 502;
     if (reply.raw.destroyed || request.raw.aborted) return;
-    return reply.code(code).send({ code: message === "CLIENT_ABORTED" ? message : "FRAGMENT_UNAVAILABLE" });
+    return reply.code(code).send({
+      code: message === "CLIENT_ABORTED" ? message : "FRAGMENT_UNAVAILABLE",
+    });
   } finally {
     active--;
   }
