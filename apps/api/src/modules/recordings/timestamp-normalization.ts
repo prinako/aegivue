@@ -46,7 +46,8 @@ export function planRecordingAppend(
     fragment.durationSeconds <= 0 ||
     !Number.isFinite(previousEndSeconds) ||
     previousEndSeconds < 0
-  ) throw new RangeError("Invalid recording or fragment timing");
+  )
+    throw new RangeError("Invalid recording or fragment timing");
 
   const recordingStart = (startMs - originUtcMs) / 1000;
   const recordingEnd = (endMs - originUtcMs) / 1000;
@@ -57,7 +58,9 @@ export function planRecordingAppend(
   }
   const appendWindowStart = Math.max(start, previousEndSeconds);
   if (actualEnd <= appendWindowStart) {
-    throw new RangeError("Fragment is fully outside the remaining append window");
+    throw new RangeError(
+      "Fragment is fully outside the remaining append window",
+    );
   }
   return {
     recordingId: recording.id,
