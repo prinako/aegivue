@@ -40,10 +40,12 @@ registered camera has footage.
 
 With no date filter, Timeline opens on the current local calendar day. Previous
 day, **Today**, and next day change only the timeline viewport. The 24-hour,
-6-hour, and 1-hour presets change horizontal scale; zoomed tracks scroll
-horizontally. Zoom keeps the visible time centered where practical, preferring
-the selected recording, then the current time for today, and midday for a
-historical day. Time ticks become more detailed with zoom, and today's timeline
+6-hour, and 1-hour presets use fixed-width windows that fill the available
+space; the timeline does not scroll horizontally. The 24-hour view contains the
+whole selected day. In the narrower views, use **Previous window** and **Next
+window** to move by six hours or one hour. Zoom focuses the window containing
+the shared playback timestamp, or the current time when playback has not been
+selected. Time ticks become more detailed with zoom, and today's timeline
 includes a current-time marker. A local day runs from one local midnight to the
 next, so a daylight-saving transition can contain 23 or 25 elapsed hours.
 
@@ -53,24 +55,35 @@ with the displayed local day. Timeline navigation and zoom do not rewrite or
 clear those filters, so returning to Grid preserves the user's exact search.
 The browser converts the resulting interval bounds to UTC for the API.
 
-Selecting an interval opens that recording in the playback workspace below the
-timeline; the timeline does not create a video element per segment. The header
-shows the recording range, current playback timestamp, and media state. A
-distinct amber playhead follows the video's current position without replacing
-today's wall-clock marker.
+Selecting an interval opens the synchronized playback workspace below the
+timeline. It creates players for up to the first four cameras in camera-ID
+order, using the cameras selected by the filter or all cameras when **All
+cameras** is active. Four is the current simultaneous-player limit, defined by
+`RecordingTimelineViewModel.maximumSimultaneousPlayers`; use the camera filter
+to choose a different group. A one-column grid is used on narrow screens and a
+two-column grid on desktop. Cameras without footage at the shared timestamp
+show **No footage** and do not create a video element.
 
-Clicking within an individual or merged coverage segment seeks to the
-represented timestamp. If media metadata is still loading, the player queues
-the seek and applies it when the playable duration is known. Browser seeking
-can land on the nearest decodable frame rather than the exact requested
-millisecond, depending on the recording's keyframes and codec. Clicking a gap
-clears the player and reports that no footage exists at that timestamp.
+The workspace has one UTC-based shared clock, global play and pause, a shared
+timeline seek, and an amber shared playhead. Displayed timestamps are converted
+to browser-local time. Each camera resolves the recording covering that clock
+time and seeks by its own recording start offset. At a recording boundary it
+resolves the next indexed file; a genuine gap remains a no-footage tile while
+other cameras continue. If every camera is in a gap, the shared clock does not
+start. Overlaps resolve deterministically by start time, end time, and recording
+ID, while clicking overlapping coverage still offers the original alternatives.
 
-Previous and next controls move chronologically through recordings from the
-selected camera, including recordings separated by gaps or overlapping in
-time. Overlaps reflect the indexed interval metadata and remain independently
-selectable; the timeline does not alter files or storage metadata to remove
-them. Playback does not automatically continue across files or camera gaps.
+Clicking within an individual or merged coverage segment seeks every active
+camera to the represented timestamp. If media metadata is still loading, the
+player queues the seek and applies it when the playable duration is known.
+Browser seeking can land on the nearest decodable frame rather than the exact
+requested millisecond, depending on the recording's keyframes and codec. The
+coordinator corrects player drift greater than 750 milliseconds. Accuracy is
+therefore best effort and remains subject to keyframe placement, decoding
+performance, and browser scheduling. A browser may reject programmatic playback
+until the user interacts with the page; the player reports that error and the
+shared controls remain available for retry. Each camera also has independent
+mute and fullscreen controls.
 
 ## Searching recordings
 

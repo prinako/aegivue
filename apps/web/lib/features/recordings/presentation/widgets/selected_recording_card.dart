@@ -18,6 +18,7 @@ class SelectedRecordingCard extends StatelessWidget {
     this.onPlaybackEvent,
     this.playbackControls,
     this.subtitle,
+    this.autoplay = false,
   });
 
   final Recording recording;
@@ -30,6 +31,7 @@ class SelectedRecordingCard extends StatelessWidget {
   final ValueChanged<RecordingPlaybackEvent>? onPlaybackEvent;
   final Widget? playbackControls;
   final String? subtitle;
+  final bool autoplay;
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +56,7 @@ class SelectedRecordingCard extends StatelessWidget {
               controller: playerController,
               initialPosition: initialPosition,
               onPlaybackEvent: onPlaybackEvent,
+              autoplay: autoplay,
             ),
           ),
           _RecordingDetails(recording: recording),

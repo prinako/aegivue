@@ -4,7 +4,9 @@ import 'package:aegivue/core/api/api_client.dart';
 import 'package:aegivue/features/recordings/data/recording_repository.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:aegivue/features/recordings/domain/recording_timeline_interval.dart';
+import 'package:aegivue/features/recordings/presentation/models/recording_camera_playback_session.dart';
 import 'package:aegivue/features/recordings/presentation/models/recording_playback.dart';
+import 'package:aegivue/features/recordings/presentation/models/recording_playback_command.dart';
 import 'package:aegivue/features/recordings/presentation/view_models/recording_timeline_view_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -328,6 +330,306 @@ void main() {
       expect(viewModel.selectedRecording?.id, 'overlap');
     },
   );
+
+  test(
+    'resolves one playback session per active camera at a shared time',
+    () async {
+      final repository = _FakeRepository()
+        ..nextResult = Future.value([
+          _interval(
+            'front-recording',
+            cameraId: 'front-door',
+            start: DateTime.utc(2026, 10, 18, 12),
+            end: DateTime.utc(2026, 10, 18, 12, 10),
+          ),
+          _interval(
+            'garage-recording',
+            cameraId: 'garage',
+            start: DateTime.utc(2026, 10, 18, 11, 58),
+            end: DateTime.utc(2026, 10, 18, 12, 8),
+          ),
+        ])
+        ..findOverride = (id) => Future.value(
+          _recording(
+            id,
+            cameraId: id.startsWith('front') ? 'front-door' : 'garage',
+            start: id.startsWith('front')
+                ? DateTime.utc(2026, 10, 18, 12)
+                : DateTime.utc(2026, 10, 18, 11, 58),
+          ),
+        );
+      final viewModel = RecordingTimelineViewModel(
+        repository,
+        now: () => DateTime.utc(2026, 10, 18, 12, 3),
+      );
+      viewModel.setAvailableCameraIds({'front-door', 'garage'});
+      await viewModel.load(cameraIds: {'front-door', 'garage'});
+
+      await viewModel.seekTo(DateTime.utc(2026, 10, 18, 12, 3));
+
+      expect(viewModel.sharedTimestamp, DateTime.utc(2026, 10, 18, 12, 3));
+      expect(viewModel.sessions.keys, {'front-door', 'garage'});
+      expect(
+        viewModel.sessions['front-door']!.offset,
+        const Duration(minutes: 3),
+      );
+      expect(viewModel.sessions['garage']!.offset, const Duration(minutes: 5));
+    },
+  );
+
+  test('keeps a no-footage session without fetching unrelated media', () async {
+    final repository = _FakeRepository()
+      ..nextResult = Future.value([
+        _interval(
+          'front-recording',
+          cameraId: 'front-door',
+          start: DateTime.utc(2026, 10, 18, 12),
+          end: DateTime.utc(2026, 10, 18, 12, 5),
+        ),
+      ]);
+    final viewModel = RecordingTimelineViewModel(repository);
+    viewModel.setAvailableCameraIds({'front-door', 'garage'});
+    await viewModel.load();
+
+    await viewModel.seekTo(DateTime.utc(2026, 10, 18, 12, 2));
+
+    expect(viewModel.sessions['garage']!.hasFootage, isFalse);
+    expect(repository.selectedIds, ['front-recording']);
+  });
+
+  test(
+    'does not start the shared clock when every camera is in a gap',
+    () async {
+      final viewModel = RecordingTimelineViewModel(_FakeRepository());
+      viewModel.setAvailableCameraIds({'front-door', 'garage'});
+      await viewModel.load();
+
+      await viewModel.seekTo(DateTime.utc(2026, 10, 18, 12, 2));
+      final commandBeforePlay = viewModel.playbackCommand.value;
+      viewModel.play();
+
+      expect(viewModel.playing, isFalse);
+      expect(viewModel.playbackCommand.value, same(commandBeforePlay));
+      viewModel.dispose();
+    },
+  );
+
+  test(
+    'switches each camera recording when the shared clock crosses a boundary',
+    () async {
+      final repository = _FakeRepository()
+        ..nextResult = Future.value([
+          _interval(
+            'front-first',
+            start: DateTime.utc(2026, 10, 18, 12),
+            end: DateTime.utc(2026, 10, 18, 12, 5),
+          ),
+          _interval(
+            'front-second',
+            start: DateTime.utc(2026, 10, 18, 12, 5),
+            end: DateTime.utc(2026, 10, 18, 12, 10),
+          ),
+        ]);
+      final viewModel = RecordingTimelineViewModel(repository);
+      viewModel.setAvailableCameraIds({'front-door'});
+      await viewModel.load();
+      await viewModel.seekTo(DateTime.utc(2026, 10, 18, 12, 4));
+      viewModel.play();
+
+      await viewModel.synchronize(DateTime.utc(2026, 10, 18, 12, 6));
+
+      expect(
+        viewModel.sessions['front-door']?.interval?.recordingId,
+        'front-second',
+      );
+      expect(viewModel.playing, isTrue);
+      expect(repository.selectedIds, ['front-first', 'front-second']);
+
+      await viewModel.synchronize(DateTime.utc(2026, 10, 18, 12, 11));
+
+      expect(viewModel.playing, isFalse);
+      expect(viewModel.sessions['front-door']?.hasFootage, isFalse);
+      viewModel.dispose();
+    },
+  );
+
+  test('caps all-camera playback at the documented resource limit', () async {
+    final viewModel = RecordingTimelineViewModel(_FakeRepository());
+    viewModel.setAvailableCameraIds({'e', 'd', 'c', 'b', 'a'});
+    await viewModel.load();
+
+    await viewModel.seekTo(DateTime.utc(2026, 10, 18, 12));
+
+    expect(
+      viewModel.activeCameraIds,
+      hasLength(RecordingTimelineViewModel.maximumSimultaneousPlayers),
+    );
+    expect(viewModel.activeCameraIds, ['a', 'b', 'c', 'd']);
+  });
+
+  test(
+    'chooses overlaps deterministically unless the user chose an alternative',
+    () async {
+      final first = _interval(
+        'a-recording',
+        cameraId: 'front-door',
+        start: DateTime.utc(2026, 10, 18, 12),
+        end: DateTime.utc(2026, 10, 18, 12, 10),
+      );
+      final alternative = _interval(
+        'b-recording',
+        cameraId: 'front-door',
+        start: DateTime.utc(2026, 10, 18, 12),
+        end: DateTime.utc(2026, 10, 18, 12, 10),
+      );
+      final repository = _FakeRepository()
+        ..nextResult = Future.value([alternative, first]);
+      final viewModel = RecordingTimelineViewModel(repository);
+      viewModel.setAvailableCameraIds({'front-door'});
+      await viewModel.load();
+
+      await viewModel.seekTo(DateTime.utc(2026, 10, 18, 12, 2));
+      expect(
+        viewModel.sessions['front-door']!.interval?.recordingId,
+        'a-recording',
+      );
+
+      await viewModel.selectAt(alternative, DateTime.utc(2026, 10, 18, 12, 2));
+      expect(
+        viewModel.sessions['front-door']!.interval?.recordingId,
+        'b-recording',
+      );
+    },
+  );
+
+  test(
+    'shares play pause and emits drift correction for a lagging camera',
+    () async {
+      final interval = _interval(
+        'front-recording',
+        cameraId: 'front-door',
+        start: DateTime.utc(2026, 10, 18, 12),
+        end: DateTime.utc(2026, 10, 18, 12, 10),
+      );
+      final repository = _FakeRepository()
+        ..nextResult = Future.value([interval]);
+      final viewModel = RecordingTimelineViewModel(repository);
+      viewModel.setAvailableCameraIds({'front-door'});
+      await viewModel.load();
+      await viewModel.seekTo(DateTime.utc(2026, 10, 18, 12, 3));
+
+      viewModel.play();
+      expect(viewModel.playing, isTrue);
+      viewModel.handleCameraPlaybackEvent(
+        'front-door',
+        'front-recording',
+        const RecordingPlaybackEvent(
+          phase: RecordingPlaybackPhase.playing,
+          position: Duration(minutes: 2, seconds: 57),
+        ),
+      );
+
+      expect(viewModel.playbackCorrection.value?.cameraId, 'front-door');
+      expect(
+        viewModel.playbackCorrection.value?.position,
+        closeToDuration(const Duration(minutes: 3), const Duration(seconds: 1)),
+      );
+      viewModel.pause();
+      expect(viewModel.playing, isFalse);
+      viewModel.dispose();
+    },
+  );
+
+  test(
+    'uses fixed zoom windows and clamps navigation to the selected day',
+    () async {
+      final viewModel = RecordingTimelineViewModel(
+        _FakeRepository(),
+        now: () => DateTime(2026, 10, 18, 12, 30),
+      );
+      await viewModel.load();
+      await viewModel.seekTo(DateTime(2026, 10, 18, 12, 30));
+
+      viewModel.setZoom(RecordingTimelineZoom.oneHour);
+      expect(viewModel.windowStart, DateTime(2026, 10, 18, 12));
+      expect(viewModel.windowEnd, DateTime(2026, 10, 18, 13));
+      viewModel.previousWindow();
+      expect(viewModel.windowStart, DateTime(2026, 10, 18, 11));
+      viewModel.nextWindow();
+      expect(viewModel.windowStart, DateTime(2026, 10, 18, 12));
+      expect(viewModel.sharedTimestamp, DateTime(2026, 10, 18, 12, 30).toUtc());
+    },
+  );
+
+  test(
+    'emits every shared seek and keeps a ready same-file session mounted',
+    () async {
+      final interval = _interval(
+        'front-recording',
+        start: DateTime.utc(2026, 10, 18, 12),
+        end: DateTime.utc(2026, 10, 18, 12, 10),
+      );
+      final repository = _FakeRepository()
+        ..nextResult = Future.value([interval]);
+      final viewModel = RecordingTimelineViewModel(repository);
+      viewModel.setAvailableCameraIds({'front-door'});
+      await viewModel.load();
+      var seekCommands = 0;
+      viewModel.playbackCommand.addListener(() {
+        if (viewModel.playbackCommand.value?.type ==
+            RecordingPlaybackCommandType.seek) {
+          seekCommands++;
+        }
+      });
+      await viewModel.seekTo(DateTime.utc(2026, 10, 18, 12, 2));
+
+      final secondSeek = viewModel.seekTo(DateTime.utc(2026, 10, 18, 12, 4));
+      expect(
+        viewModel.sessions['front-door']?.phase,
+        RecordingCameraSessionPhase.ready,
+      );
+      await secondSeek;
+
+      expect(seekCommands, 2);
+      expect(repository.selectedIds, ['front-recording']);
+    },
+  );
+
+  test(
+    'does not publish unchanged playing events to the player grid',
+    () async {
+      final interval = _interval('front-recording');
+      final repository = _FakeRepository()
+        ..nextResult = Future.value([interval]);
+      final viewModel = RecordingTimelineViewModel(repository);
+      viewModel.setAvailableCameraIds({'front-door'});
+      await viewModel.load();
+      await viewModel.seekTo(DateTime.utc(2026, 10, 18, 12, 2));
+      viewModel.play();
+      var sessionNotifications = 0;
+      viewModel.sessionsListenable.addListener(() => sessionNotifications++);
+
+      viewModel.handleCameraPlaybackEvent(
+        'front-door',
+        'front-recording',
+        const RecordingPlaybackEvent(
+          phase: RecordingPlaybackPhase.playing,
+          position: Duration(minutes: 2),
+        ),
+      );
+      viewModel.handleCameraPlaybackEvent(
+        'front-door',
+        'front-recording',
+        const RecordingPlaybackEvent(
+          phase: RecordingPlaybackPhase.playing,
+          position: Duration(minutes: 2, milliseconds: 250),
+        ),
+      );
+
+      expect(sessionNotifications, 1);
+      viewModel.dispose();
+    },
+  );
 }
 
 class _FakeRepository extends RecordingRepository {
@@ -361,13 +663,24 @@ class _FakeRepository extends RecordingRepository {
   }
 }
 
-Recording _recording(String id) => Recording(
+Recording _recording(
+  String id, {
+  String cameraId = 'front-door',
+  DateTime? start,
+}) => Recording(
   id: id,
-  cameraId: 'front-door',
-  startTime: DateTime.utc(2026, 10, 18, 12),
-  endTime: DateTime.utc(2026, 10, 18, 12, 5),
+  cameraId: cameraId,
+  startTime: start ?? DateTime.utc(2026, 10, 18, 12),
+  endTime: (start ?? DateTime.utc(2026, 10, 18, 12)).add(
+    const Duration(minutes: 10),
+  ),
   container: 'mp4',
   playbackUrl: '/$id.mp4',
+);
+
+Matcher closeToDuration(Duration value, Duration delta) => predicate<Duration?>(
+  (actual) => actual != null && (actual - value).abs() <= delta,
+  'within $delta of $value',
 );
 
 RecordingTimelineInterval _interval(
