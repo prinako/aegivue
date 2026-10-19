@@ -60,7 +60,10 @@ export function compatibleMedia(
       return { compatible: false, reason: "Decoder configuration unavailable" };
     for (const field of fields) {
       if (first[field] !== second[field])
-        return { compatible: false, reason: `Stream ${i}: ${field} differs` };
+        return {
+          compatible: false,
+          reason: `Stream ${String(i)}: ${field} differs`,
+        };
     }
   }
   return { compatible: true };
