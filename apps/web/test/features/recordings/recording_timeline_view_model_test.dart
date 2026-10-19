@@ -508,12 +508,21 @@ void main() {
           position: Duration(minutes: 5),
         ),
       );
+      expect(viewModel.playing, isTrue);
+      expect(
+        viewModel.sessions['front-door']?.phase,
+        RecordingCameraSessionPhase.loading,
+      );
       expect(repository.selectedIds, ['front-first', 'front-second']);
 
       nextRecording.complete(
         _recording('front-second', start: DateTime.utc(2026, 10, 18, 12, 5)),
       );
       await Future<void>.delayed(Duration.zero);
+      expect(
+        viewModel.sessions['front-door']?.phase,
+        RecordingCameraSessionPhase.ready,
+      );
       expect(viewModel.playing, isTrue);
       viewModel.dispose();
     },
