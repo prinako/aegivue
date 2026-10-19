@@ -1,9 +1,8 @@
 /**
- * Build wall-clock aligned MSE append instructions. A media fragment's first
- * presentation timestamp MUST be measured from the remuxed output, not guessed
- * from the FFmpeg -ss request (which can seek to an earlier keyframe).
- *
- * This module does not rewrite tfdt or make incompatible codecs compatible.
+ * Plan MSE append positioning from the actual fragment presentation timeline.
+ * A fragment requested at +30s belongs at recordingStart +30s, not at the
+ * recording's start. firstPresentationSeconds must be measured on the remuxed
+ * fragment before these instructions can be used in a production player.
  */
 export interface RecordingWindow {
   id: string;
@@ -11,9 +10,11 @@ export interface RecordingWindow {
   endTime: string;
 }
 export interface FragmentTiming {
-  /** First presentation timestamp reported by probing the remuxed fragment. */
+  /** Relative source recording offset for the intended fragment start. */
+  startSeconds: number;
+  /** Measured first PTS from the actual remuxed output (not the requested -ss). */
   firstPresentationSeconds: number;
-  /** Duration of the media actually contained in the fragment. */
+  /** Measured presentation span of the output media. */
   durationSeconds: number;
 }
 export interface AppendPlan {
@@ -25,11 +26,6 @@ export interface AppendPlan {
   overlapBeforeSeconds: number;
 }
 
-/**
- * The MediaSource timeline origin is the requested playback window's UTC start.
- * Real gaps are preserved: they must be represented in the UI and may require
- * an explicit seek across the empty range to continue playback.
- */
 export function planRecordingAppend(
   originUtcMs: number,
   recording: RecordingWindow,
@@ -43,20 +39,22 @@ export function planRecordingAppend(
     !Number.isFinite(startMs) ||
     !Number.isFinite(endMs) ||
     endMs <= startMs ||
+    !Number.isFinite(fragment.startSeconds) ||
+    fragment.startSeconds < 0 ||
     !Number.isFinite(fragment.firstPresentationSeconds) ||
     !Number.isFinite(fragment.durationSeconds) ||
     fragment.durationSeconds <= 0 ||
     !Number.isFinite(previousEndSeconds) ||
     previousEndSeconds < 0
-  ) {
-    throw new RangeError("Invalid recording or fragment timing");
+  ) throw new RangeError("Invalid recording or fragment timing");
+
+  const recordingStart = (startMs - originUtcMs) / 1000;
+  const recordingEnd = (endMs - originUtcMs) / 1000;
+  const start = recordingStart + fragment.startSeconds;
+  const actualEnd = Math.min(recordingEnd, start + fragment.durationSeconds);
+  if (recordingStart < 0 || start >= recordingEnd) {
+    throw new RangeError("Fragment outside the recording timeline");
   }
-  const start = (startMs - originUtcMs) / 1000;
-  const end = (endMs - originUtcMs) / 1000;
-  if (start < 0 || end <= 0) {
-    throw new RangeError("Recording must start at or after timeline origin");
-  }
-  const actualEnd = Math.min(end, start + fragment.durationSeconds);
   const appendWindowStart = Math.max(start, previousEndSeconds);
   if (actualEnd <= appendWindowStart) {
     throw new RangeError("Fragment is fully outside the remaining append window");
@@ -71,13 +69,13 @@ export function planRecordingAppend(
   };
 }
 
-/**
- * Preserve precise clock gaps rather than silently compressing recordings.
- * SourceBuffer settings must only be modified when it is not updating.
- */
+/** Only call between SourceBuffer updates, after awaiting updateend. */
 export function applyAppendPlan(buffer: SourceBuffer, plan: AppendPlan): void {
   if (buffer.updating) throw new Error("SourceBuffer is updating");
+  // Start must be set before end when shrinking an existing append window.
+  buffer.appendWindowStart = 0;
+  buffer.appendWindowEnd = Number.POSITIVE_INFINITY;
   buffer.timestampOffset = plan.timestampOffset;
-  buffer.appendWindowStart = plan.appendWindowStart;
   buffer.appendWindowEnd = plan.appendWindowEnd;
+  buffer.appendWindowStart = plan.appendWindowStart;
 }
