@@ -9,7 +9,14 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { resolve, sep } from "node:path";
-import { RecordingRepository, type RecordingDateFilter } from "./repository.js";
+import { cameraId } from "../cameras/schemas.js";
+import { RecordingRepository, type RecordingFilter } from "./repository.js";
+
+const cameraIds = z
+  .string()
+  .min(1)
+  .transform((value) => value.split(","))
+  .pipe(z.array(cameraId).min(1));
 
 const pagination = z
   .object({
@@ -17,6 +24,7 @@ const pagination = z
     pageSize: z.coerce.number().int().min(1).max(100).default(25),
     from: z.string().datetime({ offset: true }).optional(),
     to: z.string().datetime({ offset: true }).optional(),
+    cameraIds: cameraIds.optional(),
   })
   .superRefine((value, context) => {
     if (
@@ -27,6 +35,24 @@ const pagination = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "From must not be after to",
+      });
+    }
+  });
+const maximumTimelineWindowMs = 31 * 24 * 60 * 60 * 1000;
+const timelineItemLimit = 5000;
+const timelineQuery = z
+  .object({
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true }),
+    cameraIds: cameraIds.optional(),
+  })
+  .superRefine((value, context) => {
+    const from = Date.parse(value.from);
+    const to = Date.parse(value.to);
+    if (from >= to || to - from > maximumTimelineWindowMs) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Timeline window must be positive and at most 31 days",
       });
     }
   });
@@ -158,10 +184,10 @@ async function sendRecordingMedia(
   }
 }
 
-export const recordingRoutes: FastifyPluginAsync<{
-  storagePath: string;
-}> = async (app, options) => {
-  const repository = new RecordingRepository(app.db);
+function registerRecordingListRoute(
+  app: FastifyInstance,
+  repository: RecordingRepository,
+) {
   app.get("/", async (request, reply) => {
     const parsed = pagination.safeParse(request.query);
     if (!parsed.success)
@@ -170,9 +196,10 @@ export const recordingRoutes: FastifyPluginAsync<{
         message: "Invalid recording filters",
       });
     const offset = (parsed.data.page - 1) * parsed.data.pageSize;
-    const filter: RecordingDateFilter = {};
+    const filter: RecordingFilter = {};
     if (parsed.data.from) filter.from = new Date(parsed.data.from);
     if (parsed.data.to) filter.to = new Date(parsed.data.to);
+    if (parsed.data.cameraIds) filter.cameraIds = parsed.data.cameraIds;
     const [items, totalItems] = await Promise.all([
       repository.list(parsed.data.pageSize, offset, filter),
       repository.count(filter),
@@ -185,6 +212,12 @@ export const recordingRoutes: FastifyPluginAsync<{
       totalPages: Math.ceil(totalItems / parsed.data.pageSize),
     };
   });
+}
+
+function registerRecordingDetailsRoute(
+  app: FastifyInstance,
+  repository: RecordingRepository,
+) {
   app.get("/:id", async (request, reply) => {
     const parsed = recordingId.safeParse((request.params as { id: string }).id);
     if (!parsed.success)
@@ -199,6 +232,42 @@ export const recordingRoutes: FastifyPluginAsync<{
         .send({ code: "NOT_FOUND", message: "Recording not found" })
     );
   });
+}
+
+function registerRecordingTimelineRoute(
+  app: FastifyInstance,
+  repository: RecordingRepository,
+) {
+  app.get("/timeline", async (request, reply) => {
+    const parsed = timelineQuery.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        code: "VALIDATION_ERROR",
+        message: "Invalid recording timeline filters",
+      });
+    }
+    const items = await repository.timeline(
+      {
+        from: new Date(parsed.data.from),
+        to: new Date(parsed.data.to),
+        ...(parsed.data.cameraIds ? { cameraIds: parsed.data.cameraIds } : {}),
+      },
+      timelineItemLimit + 1,
+    );
+    if (items.length > timelineItemLimit) {
+      return reply.code(422).send({
+        code: "TIMELINE_RESULT_LIMIT",
+        message: "Timeline contains too many recordings; narrow the filters",
+      });
+    }
+    return { items };
+  });
+}
+
+function registerRecordingExpiryRoute(
+  app: FastifyInstance,
+  repository: RecordingRepository,
+) {
   app.patch("/:id/expiry", async (request, reply) => {
     const id = recordingId.safeParse((request.params as { id: string }).id);
     const body = expiryUpdate.safeParse(request.body);
@@ -227,6 +296,13 @@ export const recordingRoutes: FastifyPluginAsync<{
         .send({ code: "NOT_FOUND", message: "Recording not found" })
     );
   });
+}
+
+function registerRecordingThumbnailRoute(
+  app: FastifyInstance,
+  repository: RecordingRepository,
+  storagePath: string,
+) {
   app.get("/:id/thumbnail", async (request, reply) => {
     const parsed = recordingId.safeParse((request.params as { id: string }).id);
     if (!parsed.success)
@@ -240,17 +316,21 @@ export const recordingRoutes: FastifyPluginAsync<{
         .code(404)
         .send({ code: "NOT_FOUND", message: "Recording not found" });
 
-    // const root = resolve(options.storagePath);
-    // const file = resolve(root, recording.filePath);
     const file = await resolveRecordingFile(
       reply,
-      options.storagePath,
+      storagePath,
       recording.filePath,
     );
     if (!file) return;
     return sendThumbnail(app, reply, file, parsed.data);
   });
+}
 
+function registerRecordingMediaRoute(
+  app: FastifyInstance,
+  repository: RecordingRepository,
+  storagePath: string,
+) {
   app.get("/:id/media", async (request, reply) => {
     const parsed = recordingId.safeParse((request.params as { id: string }).id);
     if (!parsed.success)
@@ -263,16 +343,26 @@ export const recordingRoutes: FastifyPluginAsync<{
         .code(404)
         .send({ code: "NOT_FOUND", message: "Recording not found" });
 
-    // const root = resolve(options.storagePath);
-    // const file = resolve(root, recording.filePath);
     const file = await resolveRecordingFile(
       reply,
-      options.storagePath,
+      storagePath,
       recording.filePath,
     );
     if (!file) return;
     return sendRecordingMedia(request, reply, file, recording.container);
   });
+}
+
+export const recordingRoutes: FastifyPluginAsync<{
+  storagePath: string;
+}> = async (app, options) => {
+  const repository = new RecordingRepository(app.db);
+  registerRecordingListRoute(app, repository);
+  registerRecordingTimelineRoute(app, repository);
+  registerRecordingDetailsRoute(app, repository);
+  registerRecordingExpiryRoute(app, repository);
+  registerRecordingThumbnailRoute(app, repository, options.storagePath);
+  registerRecordingMediaRoute(app, repository, options.storagePath);
 };
 
 export function parseByteRange(

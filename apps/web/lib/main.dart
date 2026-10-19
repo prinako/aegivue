@@ -6,6 +6,7 @@ import 'package:aegivue/features/events/data/event_repository.dart';
 import 'package:aegivue/features/events/presentation/view_models/event_list_view_model.dart';
 import 'package:aegivue/features/recordings/data/recording_repository.dart';
 import 'package:aegivue/features/recordings/presentation/view_models/recording_list_view_model.dart';
+import 'package:aegivue/features/recordings/presentation/view_models/recording_timeline_view_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
@@ -22,6 +23,10 @@ void main() {
         ChangeNotifierProvider(
           create: (context) =>
               CameraListViewModel(context.read<CameraRepository>())..load(),
+        ),
+        ChangeNotifierProvider(
+          create: (context) =>
+              RecordingTimelineViewModel(context.read<RecordingRepository>()),
         ),
         ChangeNotifierProvider(
           create: (context) =>

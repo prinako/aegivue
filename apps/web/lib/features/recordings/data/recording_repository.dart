@@ -2,6 +2,7 @@ import 'package:aegivue/core/api/api_client.dart';
 import 'package:aegivue/core/api/api_endpoints.dart';
 import 'package:aegivue/features/recordings/data/recording_page.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
+import 'package:aegivue/features/recordings/domain/recording_timeline_interval.dart';
 
 class RecordingRepository {
   const RecordingRepository(this.api);
@@ -14,12 +15,15 @@ class RecordingRepository {
     int pageSize = 25,
     DateTime? from,
     DateTime? to,
+    Set<String> cameraIds = const {},
   }) async {
+    final sortedCameraIds = cameraIds.toList()..sort();
     final queryParameters = <String, String>{
       'page': '$page',
       'pageSize': '$pageSize',
       if (from != null) 'from': from.toUtc().toIso8601String(),
       if (to != null) 'to': to.toUtc().toIso8601String(),
+      if (sortedCameraIds.isNotEmpty) 'cameraIds': sortedCameraIds.join(','),
     };
     final uri = Uri(
       path: ApiEndpoints.recordings,
@@ -44,6 +48,36 @@ class RecordingRepository {
               '${ApiEndpoints.recordings}/$id/expiry',
               data: {'expiresAt': expiresAt?.toUtc().toIso8601String()},
             )
+            as Map<String, Object?>;
+    return Recording.fromJson(json);
+  }
+
+  Future<List<RecordingTimelineInterval>> timeline({
+    required DateTime from,
+    required DateTime to,
+    Set<String> cameraIds = const {},
+  }) async {
+    final sortedCameraIds = cameraIds.toList()..sort();
+    final uri = Uri(
+      path: ApiEndpoints.recordingTimeline,
+      queryParameters: {
+        'from': from.toUtc().toIso8601String(),
+        'to': to.toUtc().toIso8601String(),
+        if (sortedCameraIds.isNotEmpty) 'cameraIds': sortedCameraIds.join(','),
+      },
+    );
+    final json = await api.getJson(uri.toString()) as Map<String, Object?>;
+    return (json['items']! as List<Object?>)
+        .map(
+          (item) =>
+              RecordingTimelineInterval.fromJson(item! as Map<String, Object?>),
+        )
+        .toList(growable: false);
+  }
+
+  Future<Recording> find(String id) async {
+    final json =
+        await api.getJson('${ApiEndpoints.recordings}/$id')
             as Map<String, Object?>;
     return Recording.fromJson(json);
   }

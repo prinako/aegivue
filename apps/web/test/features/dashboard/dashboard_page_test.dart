@@ -111,6 +111,7 @@ class _RecordingRepository extends RecordingRepository {
     int pageSize = 25,
     DateTime? from,
     DateTime? to,
+    Set<String> cameraIds = const {},
   }) async {
     listCalls++;
     return RecordingPage(

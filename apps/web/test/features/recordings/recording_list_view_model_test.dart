@@ -256,6 +256,96 @@ void main() {
     expect(repository.requests.last, (page: 1, from: from, to: null));
   });
 
+  test('applying a camera filter preserves the active date filter', () async {
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(_page(1, [_recording('filtered')]));
+    final viewModel = RecordingListViewModel(repository);
+    final from = DateTime.utc(2026, 10, 17, 8);
+    await viewModel.applyDateFilter(from: from);
+
+    await viewModel.applyCameraFilter({'front-door', 'garage'});
+
+    expect(viewModel.from, from);
+    expect(viewModel.cameraIds, {'front-door', 'garage'});
+    expect(repository.requests.last, (page: 1, from: from, to: null));
+    expect(repository.cameraRequests.last, {'front-door', 'garage'});
+  });
+
+  test('clearing the camera filter preserves the active date filter', () async {
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(_page(1, [_recording('filtered')]));
+    final viewModel = RecordingListViewModel(repository);
+    final to = DateTime.utc(2026, 10, 17, 18);
+    await viewModel.applyDateFilter(to: to);
+    await viewModel.applyCameraFilter({'front-door'});
+
+    await viewModel.clearCameraFilter();
+
+    expect(viewModel.to, to);
+    expect(viewModel.cameraIds, isEmpty);
+    expect(repository.requests.last, (page: 1, from: null, to: to));
+    expect(repository.cameraRequests.last, isEmpty);
+  });
+
+  test('applying a camera filter resets pagination to page one', () async {
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(_page(1, [_recording('one')], totalPages: 2))
+      ..pages[2] = Future.value(_page(2, [_recording('two')], totalPages: 2));
+    final viewModel = RecordingListViewModel(repository);
+    await viewModel.load();
+    await viewModel.loadMore();
+
+    await viewModel.applyCameraFilter({'front-door'});
+
+    expect(repository.requests.last.page, 1);
+    expect(repository.cameraRequests.last, {'front-door'});
+    expect(viewModel.items.map((item) => item.id), ['one']);
+  });
+
+  test('pagination and refresh keep both recording filters', () async {
+    final repository = _FakeRecordingRepository()
+      ..pages[1] = Future.value(_page(1, [_recording('one')], totalPages: 2))
+      ..pages[2] = Future.value(_page(2, [_recording('two')], totalPages: 2));
+    final viewModel = RecordingListViewModel(repository);
+    final from = DateTime.utc(2026, 10, 17, 8);
+    await viewModel.applyDateFilter(from: from);
+    await viewModel.applyCameraFilter({'front-door', 'garage'});
+
+    await viewModel.loadMore();
+    await viewModel.refresh();
+
+    expect(repository.requests.sublist(repository.requests.length - 2), [
+      (page: 2, from: from, to: null),
+      (page: 1, from: from, to: null),
+    ]);
+    expect(
+      repository.cameraRequests.sublist(repository.cameraRequests.length - 2),
+      [
+        {'front-door', 'garage'},
+        {'front-door', 'garage'},
+      ],
+    );
+  });
+
+  test(
+    'an older camera filter request cannot replace a newer result',
+    () async {
+      final firstFilter = Completer<RecordingPage>();
+      final repository = _FakeRecordingRepository()
+        ..pages[1] = firstFilter.future;
+      final viewModel = RecordingListViewModel(repository);
+
+      final older = viewModel.applyCameraFilter({'front-door'});
+      repository.pages[1] = Future.value(_page(1, [_recording('new')]));
+      await viewModel.applyCameraFilter({'garage'});
+      firstFilter.complete(_page(1, [_recording('old')]));
+      await older;
+
+      expect(viewModel.items.single.id, 'new');
+      expect(viewModel.cameraIds, {'garage'});
+    },
+  );
+
   test('an older filtered request cannot overwrite a newer filter', () async {
     final firstFilter = Completer<RecordingPage>();
     final repository = _FakeRecordingRepository()
@@ -376,6 +466,7 @@ class _FakeRecordingRepository extends RecordingRepository {
   final Map<int, Future<RecordingPage>> pages = {};
   Future<Recording>? expiryResult;
   final List<({int page, DateTime? from, DateTime? to})> requests = [];
+  final List<Set<String>> cameraRequests = [];
   int get listCalls => requests.length;
 
   @override
@@ -384,8 +475,10 @@ class _FakeRecordingRepository extends RecordingRepository {
     int pageSize = 25,
     DateTime? from,
     DateTime? to,
+    Set<String> cameraIds = const {},
   }) {
     requests.add((page: page, from: from, to: to));
+    cameraRequests.add(Set<String>.of(cameraIds));
     return pages[page]!;
   }
 
