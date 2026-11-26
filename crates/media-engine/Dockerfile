@@ -9,7 +9,7 @@ ENV PUID=1000 \
     PGID=1000
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates ffmpeg wget gosu passwd \
+    && apt-get install -y --no-install-recommends ca-certificates ffmpeg wget gosu passwd perl-base \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 1000 aegivue \
     && useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin aegivue \
