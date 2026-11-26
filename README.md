@@ -195,7 +195,8 @@ behavior, and current detector limitations.
 The recording library browses finalized footage by camera and custom local
 date/time ranges. Switch between the virtualized card grid and an interactive
 camera timeline with day navigation, 24-hour, 6-hour, and 1-hour zoom presets,
-and interval playback. Filtering and pagination run on the server. See the
+fixed-width time windows, and synchronized multi-camera playback. Filtering and
+pagination run on the server. See the
 [recordings guide](docs/recordings/README.md) for search semantics, playback,
 downloads, and retention behavior.
 

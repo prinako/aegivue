@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Aegivue MSE continuity harness</title></head>
+<body>
+<video id="video" controls muted playsinline width="640"></video>
+<pre id="report"></pre>
+<script src="./timeline_stream_player.js"></script>
+<script>
+const video = document.getElementById('video');
+const report = document.getElementById('report');
+window.runMseContinuity = async ({ mimeType, fragments, expectedBoundary }) => {
+  const events = [];
+  const onTime = () => events.push(video.currentTime);
+  video.addEventListener('timeupdate', onTime);
+  const player = new window.AegivueTimelineStream(video, { mimeType });
+  try {
+    for (const item of fragments) {
+      const response = await fetch(item.url);
+      if (!response.ok) throw new Error('Fragment HTTP ' + response.status);
+      const bytes = await response.arrayBuffer();
+      await player.appendFragment(bytes, {
+        timestampOffset: item.timestampOffset,
+        appendWindowStart: item.appendWindowStart,
+        appendWindowEnd: item.appendWindowEnd,
+      });
+    }
+    if (expectedBoundary != null) {
+      video.currentTime = Math.max(0, expectedBoundary - 0.4);
+      await video.play();
+      await new Promise((resolve, reject) => {
+        const deadline = setTimeout(() => reject(new Error('Playback did not cross boundary')), 10000);
+        function onProgress() {
+          if (video.currentTime > expectedBoundary + 0.25) {
+            clearTimeout(deadline);
+            video.removeEventListener('timeupdate', onProgress);
+            resolve();
+          }
+        }
+        video.addEventListener('timeupdate', onProgress);
+      });
+    }
+    const result = { passed: true, samples: events.length, finalTime: video.currentTime,
+      sourceBufferCount: player.mediaSource.sourceBuffers.length };
+    report.textContent = JSON.stringify(result, null, 2);
+    return result;
+  } finally {
+    video.removeEventListener('timeupdate', onTime);
+    player.dispose();
+  }
+};
+</script>
+</body>
+</html>

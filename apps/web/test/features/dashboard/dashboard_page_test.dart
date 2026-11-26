@@ -14,6 +14,9 @@ import 'package:aegivue/features/recordings/data/recording_page.dart';
 import 'package:aegivue/features/recordings/data/recording_repository.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:aegivue/features/recordings/presentation/view_models/recording_list_view_model.dart';
+import 'package:aegivue/features/recordings/presentation/view_models/recording_timeline_view_model.dart';
+import 'package:aegivue/features/recordings/presentation/widgets/recording_header_actions.dart';
+import 'package:aegivue/shared/widgets/app_header_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -33,6 +36,9 @@ void main() {
           ChangeNotifierProvider(
             create: (_) => RecordingListViewModel(recordings),
           ),
+          ChangeNotifierProvider(
+            create: (_) => RecordingTimelineViewModel(recordings),
+          ),
           ChangeNotifierProvider(create: (_) => EventListViewModel(events)),
         ],
         child: const App(),
@@ -48,6 +54,51 @@ void main() {
     expect(cameras.listCalls, 0);
     expect(recordings.listCalls, 1);
     expect(events.listCalls, 0);
+  });
+
+  testWidgets('recording controls compose into only the recordings header', (
+    tester,
+  ) async {
+    final cameras = _CameraRepository();
+    final recordings = _RecordingRepository();
+    final events = _EventRepository();
+    appRouter.go('/');
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<CameraRepository>.value(value: cameras),
+          Provider<RecordingRepository>.value(value: recordings),
+          Provider<EventRepository>.value(value: events),
+          ChangeNotifierProvider(create: (_) => CameraListViewModel(cameras)),
+          ChangeNotifierProvider(
+            create: (_) => RecordingListViewModel(recordings),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => RecordingTimelineViewModel(recordings),
+          ),
+          ChangeNotifierProvider(create: (_) => EventListViewModel(events)),
+        ],
+        child: const App(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RecordingHeaderActions), findsNothing);
+    await tester.tap(find.text('Recordings'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(AppHeaderWidget),
+        matching: find.byType(RecordingHeaderActions),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Recording library'), findsNothing);
+
+    await tester.tap(find.text('Overview'));
+    await tester.pumpAndSettle();
+    expect(find.byType(RecordingHeaderActions), findsNothing);
   });
 
   testWidgets('overview shows the server recording total', (tester) async {
@@ -69,6 +120,9 @@ void main() {
           ),
           ChangeNotifierProvider(
             create: (_) => RecordingListViewModel(recordings)..load(),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => RecordingTimelineViewModel(recordings),
           ),
           ChangeNotifierProvider(create: (_) => EventListViewModel(events)),
         ],

@@ -3,13 +3,13 @@ library;
 
 import 'dart:async';
 
-import 'package:aegivue/core/theme/app_theme.dart';
 import 'package:aegivue/features/cameras/domain/camera.dart';
 import 'package:aegivue/features/cameras/domain/camera_connection.dart';
 import 'package:aegivue/features/cameras/domain/camera_motion_config.dart';
 import 'package:aegivue/features/cameras/domain/camera_recording_config.dart';
 import 'package:aegivue/features/recordings/domain/recording.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_card.dart';
+import 'package:aegivue/features/recordings/presentation/widgets/recording_header_actions.dart';
 import 'package:aegivue/features/recordings/presentation/widgets/recording_library.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,90 +51,13 @@ void main() {
     expect(find.byType(RecordingCard).evaluate().length, lessThan(20));
   });
 
-  testWidgets(
-    'shows the filter toolbar at the right edge of a desktop header',
-    (tester) async {
-      tester.view.physicalSize = const Size(1200, 700);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.build(),
-          home: Scaffold(
-            body: RecordingLibrary(
-              recordings: const [],
-              onRefresh: () async {},
-              onLoadMore: () async {},
-              onSetExpiry: (_, _) async {},
-              hasMore: false,
-              loadingMore: false,
-              updatingExpiry: false,
-              cameras: const [_frontDoor],
-            ),
-          ),
-        ),
-      );
-
-      final filter = find.widgetWithText(OutlinedButton, 'All cameras');
-      expect(filter.hitTestable(), findsOneWidget);
-      expect(tester.getTopRight(filter).dx, closeTo(1176, 1));
-    },
-  );
-
-  testWidgets(
-    'keeps recording filters visible while the recording grid scrolls',
-    (tester) async {
-      tester.view.physicalSize = const Size(800, 600);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      final recordings = List.generate(
-        100,
-        (index) => Recording(
-          id: 'recording-$index',
-          cameraId: 'camera-$index',
-          startTime: DateTime.utc(2026, 10, 1),
-          container: 'mp4',
-          playbackUrl: '/recording-$index.mp4',
-        ),
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: RecordingLibrary(
-              recordings: recordings,
-              onRefresh: () async {},
-              onLoadMore: () async {},
-              onSetExpiry: (_, _) async {},
-              hasMore: false,
-              loadingMore: false,
-              updatingExpiry: false,
-              cameras: const [_frontDoor],
-              selectedCameraIds: const {'front-door'},
-            ),
-          ),
-        ),
-      );
-
-      expect(find.text('Filter by date'), findsOneWidget);
-      expect(find.text('Front Door'), findsOneWidget);
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, -2000));
-      await tester.pump();
-
-      expect(find.text('Filter by date'), findsOneWidget);
-      expect(find.text('Front Door'), findsOneWidget);
-    },
-  );
-
-  testWidgets('keeps both filters usable in a narrow header', (tester) async {
-    tester.view.physicalSize = const Size(480, 700);
+  testWidgets('removes the redundant recording heading and toolbar', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -152,9 +75,9 @@ void main() {
       ),
     );
 
-    expect(find.text('Filter by date').hitTestable(), findsOneWidget);
-    expect(find.text('All cameras').hitTestable(), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    expect(find.text('Recording library'), findsNothing);
+    expect(find.text('Filter by date'), findsNothing);
+    expect(find.text('All cameras'), findsNothing);
   });
 
   testWidgets('requests one next page while a near-bottom load is pending', (
@@ -219,7 +142,7 @@ void main() {
     );
 
     expect(find.text('No finalized recordings yet.'), findsOneWidget);
-    expect(find.text('Filter by date'), findsOneWidget);
+    expect(find.text('Filter by date'), findsNothing);
   });
 
   testWidgets('applies the date range from the filter dialog', (tester) async {
@@ -229,24 +152,13 @@ void main() {
     DateTime? appliedTo;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: RecordingLibrary(
-            recordings: const [],
-            onRefresh: () async {},
-            onLoadMore: () async {},
-            onSetExpiry: (_, _) async {},
-            hasMore: false,
-            loadingMore: false,
-            updatingExpiry: false,
-            filterFrom: from,
-            filterTo: to,
-            onApplyDateFilter: ({from, to}) async {
-              appliedFrom = from;
-              appliedTo = to;
-            },
-          ),
-        ),
+      _header(
+        filterFrom: from,
+        filterTo: to,
+        onApplyDateFilter: ({from, to}) async {
+          appliedFrom = from;
+          appliedTo = to;
+        },
       ),
     );
 
@@ -273,20 +185,9 @@ void main() {
   testWidgets('clears an active date filter', (tester) async {
     var clearCalls = 0;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: RecordingLibrary(
-            recordings: const [],
-            onRefresh: () async {},
-            onLoadMore: () async {},
-            onSetExpiry: (_, _) async {},
-            hasMore: false,
-            loadingMore: false,
-            updatingExpiry: false,
-            filterFrom: DateTime(2026, 10, 17),
-            onClearDateFilter: () async => clearCalls++,
-          ),
-        ),
+      _header(
+        filterFrom: DateTime(2026, 10, 17),
+        onClearDateFilter: () async => clearCalls++,
       ),
     );
 
@@ -506,6 +407,31 @@ void main() {
     },
   );
 }
+
+Widget _header({
+  DateTime? filterFrom,
+  DateTime? filterTo,
+  Future<void> Function({DateTime? from, DateTime? to})? onApplyDateFilter,
+  Future<void> Function()? onClearDateFilter,
+}) => MaterialApp(
+  home: Scaffold(
+    body: RecordingHeaderActions(
+      view: RecordingLibraryView.grid,
+      onSelectView: (_) {},
+      filterFrom: filterFrom,
+      filterTo: filterTo,
+      onApplyDateFilter:
+          onApplyDateFilter ?? ({DateTime? from, DateTime? to}) async {},
+      onClearDateFilter: onClearDateFilter ?? () async {},
+      cameras: const [_frontDoor],
+      camerasLoading: false,
+      cameraError: null,
+      selectedCameraIds: const {},
+      onApplyCameraFilter: (_) async {},
+      onClearCameraFilter: () async {},
+    ),
+  ),
+);
 
 const _frontDoor = Camera(
   id: 'front-door',

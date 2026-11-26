@@ -76,16 +76,22 @@ The recordings feature follows the same Provider and ChangeNotifier MVVM flow.
 state, and stale-request generation checks; `RecordingRepository` converts the
 date bounds to UTC and requests filtered API pages. Refreshes and subsequent
 pages retain both filters. `RecordingTimelineViewModel` separately owns its
-local-day viewport, zoom, lightweight interval request, selected recording, and
-stale-request generations. Both view models use the same repository and shared
-filter values, while timeline navigation never mutates the Grid's filters. The
-date, camera, and view controls sit outside the content area.
+local-day viewport, fixed zoom window, lightweight interval request, UTC shared
+playback clock, per-camera playback sessions, and stale-request generations. It
+resolves each camera's recording and media offset at the shared timestamp, while
+widgets own only the corresponding browser-player controllers. Both view models
+use the same repository and shared filter values, while timeline navigation
+never mutates the Grid's filters. The date, camera, and view controls sit outside
+the content area.
 
 `SliverGrid.builder` continues to construct recording cards lazily as they enter
 the viewport. Timeline uses a dedicated bounded overlap endpoint instead of
 assembling availability from paginated Grid results, and creates a video player
-only after an interval is selected. Loaded Grid metadata can still accumulate
-as more pages are appended.
+only for active cameras with footage after a timeline timestamp is selected.
+The shared clock updates the playhead without rebuilding video elements on each
+tick, and per-camera sessions handle media boundaries, gaps, errors, and drift
+correction. Loaded Grid metadata can still accumulate as more pages are
+appended.
 
 ## Core data flows
 

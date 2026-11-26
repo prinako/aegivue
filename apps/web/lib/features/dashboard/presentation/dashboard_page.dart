@@ -1,5 +1,6 @@
 import 'package:aegivue/features/cameras/presentation/view_models/camera_list_view_model.dart';
 import 'package:aegivue/features/events/presentation/view_models/event_list_view_model.dart';
+import 'package:aegivue/features/dashboard/presentation/view_models/app_header_actions_view_model.dart';
 import 'package:aegivue/features/recordings/presentation/view_models/recording_list_view_model.dart';
 import 'package:aegivue/shared/widgets/app_header_widget.dart';
 import 'package:aegivue/shared/widgets/side_nav_widget.dart';
@@ -9,6 +10,20 @@ import 'package:provider/provider.dart';
 
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key, required this.navigationShell});
+
+  final StatefulNavigationShell navigationShell;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => AppHeaderActionsViewModel(),
+      child: _DashboardContent(navigationShell: navigationShell),
+    );
+  }
+}
+
+class _DashboardContent extends StatelessWidget {
+  const _DashboardContent({required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
@@ -37,6 +52,7 @@ class DashboardPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final section = navigationShell.currentIndex;
+    final headerActions = context.watch<AppHeaderActionsViewModel>();
     return LayoutBuilder(
       builder: (context, constraints) {
         final desktop = constraints.maxWidth >= 920;
@@ -51,7 +67,10 @@ class DashboardPage extends StatelessWidget {
                     children: [
                       AppHeaderWidget(
                         title: _titleForSection(section),
-                        onRefresh: () => _refreshSection(context, section),
+                        actions: headerActions.buildActions(context, section),
+                        onRefresh:
+                            headerActions.refreshFor(section) ??
+                            () => _refreshSection(context, section),
                         onAdd: section <= 1 ? () => _addCamera(context) : null,
                       ),
                       Expanded(child: navigationShell),
